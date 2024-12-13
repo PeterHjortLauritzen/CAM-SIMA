@@ -827,7 +827,6 @@ subroutine thermodynamic_consistency(phys_state, const_data_ptr, phys_tend, ncol
    use air_composition,   only: get_cp
 
    ! SE dycore:
-   use dimensions_mod,    only: lcp_moist
    use control_mod,       only: phys_dyn_cp
 
    type(physics_state), intent(in)    :: phys_state
