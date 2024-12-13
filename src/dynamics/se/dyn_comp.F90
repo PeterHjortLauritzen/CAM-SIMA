@@ -111,10 +111,10 @@ subroutine dyn_readnl(NLFileName)
    use control_mod,    only: vert_remap_uvTq_alg, vert_remap_tracer_alg
    use control_mod,    only: tstep_type, rk_stage_user
    use control_mod,    only: ftype, limiter_option, partmethod
-   use control_mod,    only: topology, phys_dyn_cp, variable_nsplit
+   use control_mod,    only: topology, variable_nsplit
    use control_mod,    only: fine_ne, hypervis_power, hypervis_scaling
    use control_mod,    only: max_hypervis_courant, statediag_numtrac,refined_mesh
-   use control_mod,    only: raytau0, raykrange, rayk0, molecular_diff
+   use control_mod,    only: molecular_diff, pgf_formulation, dribble_in_rsplit_loop
    use dimensions_mod, only: ne, npart
    use dimensions_mod, only: hypervis_dynamic_ref_state,large_Courant_incr
    use dimensions_mod, only: fvm_supercycling, fvm_supercycling_jet
@@ -169,10 +169,6 @@ subroutine dyn_readnl(NLFileName)
    integer                      :: se_fvm_supercycling_jet
    integer                      :: se_kmin_jet
    integer                      :: se_kmax_jet
-   integer                      :: se_phys_dyn_cp
-   real(r8)                     :: se_raytau0
-   real(r8)                     :: se_raykrange
-   integer                      :: se_rayk0
    real(r8)                     :: se_molecular_diff
 
    namelist /dyn_se_nl/            &
@@ -216,10 +212,6 @@ subroutine dyn_readnl(NLFileName)
       se_fvm_supercycling_jet,     &
       se_kmin_jet,                 &
       se_kmax_jet,                 &
-      se_phys_dyn_cp,              &
-      se_raytau0,                  &
-      se_raykrange,                &
-      se_rayk0,                    &
       se_molecular_diff
 
    !--------------------------------------------------------------------------
@@ -288,12 +280,7 @@ subroutine dyn_readnl(NLFileName)
    call MPI_bcast(se_fvm_supercycling_jet, 1, mpi_integer, masterprocid, mpicom, ierr)
    call MPI_bcast(se_kmin_jet, 1, mpi_integer, masterprocid, mpicom, ierr)
    call MPI_bcast(se_kmax_jet, 1, mpi_integer, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_phys_dyn_cp, 1, mpi_integer, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_rayk0 , 1, mpi_integer, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_raykrange, 1, mpi_real8, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_raytau0, 1, mpi_real8, masterprocid, mpicom, ierr)
    call MPI_bcast(se_molecular_diff, 1, mpi_real8, masterprocid, mpicom, ierr)
-
    ! If se_npes is set to negative one, then make it match host model:
    if (se_npes == -1) then
       se_npes = npes
@@ -363,10 +350,6 @@ subroutine dyn_readnl(NLFileName)
    kmin_jet                 = se_kmin_jet
    kmax_jet                 = se_kmax_jet
    variable_nsplit          = .false.
-   phys_dyn_cp              = se_phys_dyn_cp
-   raytau0                  = se_raytau0
-   raykrange                = se_raykrange
-   rayk0                    = se_rayk0
    molecular_diff           = se_molecular_diff
 
    if (rsplit < 1) then
@@ -425,7 +408,6 @@ subroutine dyn_readnl(NLFileName)
       end if
       write(iulog, '(a,i0)')   'dyn_readnl: se_npes                     = ',se_npes
       write(iulog, '(a,i0)')   'dyn_readnl: se_nsplit                   = ',se_nsplit
-      write(iulog, '(a,i0)')   'dyn_readnl: se_phys_dyn_cp              = ',se_phys_dyn_cp
       !
       ! se_nu<0 then coefficients are set automatically in module global_norms_mod
       !
@@ -482,10 +464,6 @@ subroutine dyn_readnl(NLFileName)
                             se_write_gll_corners
       write(iulog,'(a,l1)') 'dyn_readnl: write restart data on unstructured grid = ', &
                             se_write_restart_unstruct
-
-      write(iulog, '(a,e9.2)') 'dyn_readnl: se_raytau0         = ', raytau0
-      write(iulog, '(a,e9.2)') 'dyn_readnl: se_raykrange       = ', raykrange
-      write(iulog, '(a,i0)'  ) 'dyn_readnl: se_rayk0           = ', rayk0
       write(iulog, '(a,e9.2)') 'dyn_readnl: se_molecular_diff  = ', molecular_diff
    end if
 
@@ -572,7 +550,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    use dimensions_mod,     only: irecons_tracer_lev, irecons_tracer, otau, kord_tr, kord_tr_cslam
    use prim_driver_mod,    only: prim_init2
    use time_mod,           only: time_at
-   use control_mod,        only: runtype, raytau0, raykrange, rayk0, molecular_diff, nu_top
+   use control_mod,        only: runtype, nu_top, molecular_diff
    use test_fvm_mapping,   only: test_mapping_addfld
    use control_mod,        only: vert_remap_uvTq_alg, vert_remap_tracer_alg
 
@@ -716,27 +694,6 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    if (initial_run) then
      call read_inidat(dyn_in)
      call clean_iodesc_list()
-   end if
-   !
-   ! initialize Rayleigh friction
-   !
-   krange = raykrange
-   if (raykrange .eq. 0._r8) krange = (rayk0 - 1) / 2._r8
-   tau0 = (86400._r8) * raytau0   ! convert to seconds
-   otau0 = 0._r8
-   if (tau0 .ne. 0._r8) otau0 = 1._r8/tau0
-   do k = 1, nlev
-     otau(k) = otau0 * (1.0_r8 + tanh((rayk0 - k) / krange)) / (2._r8)
-   enddo
-   if (masterproc) then
-     if (tau0 > 0._r8) then
-       write (iulog,*) 'SE dycore Rayleigh friction - krange = ', krange
-       write (iulog,*) 'SE dycore Rayleigh friction - otau0 = ', 1.0_r8/tau0
-       write (iulog,*) 'SE dycore Rayleigh friction decay rate profile (only applied to (u,v))'
-       do k = 1, nlev
-         write (iulog,*) '   k = ', k, '   otau = ', otau(k)
-       enddo
-     end if
    end if
    !
    ! initialize diffusion in dycore

@@ -69,7 +69,6 @@ contains
     use hybrid_mod,        only: hybrid_t
     use time_mod,          only: TimeLevel_t,  timelevel_qdp, tevolve
     use fvm_control_volume_mod, only: fvm_struct
-    use control_mod,       only: raytau0
 
     implicit none
 
@@ -156,7 +155,6 @@ contains
 
     dt_vis = dt
 
-    if (raytau0>0) call rayleigh_friction(elem,n0,nets,nete,dt)
     if (tstep_type==1) then
       ! RK2-SSP 3 stage.  matches tracer scheme. optimal SSP CFL, but
       ! not optimal for regular CFL
@@ -797,57 +795,12 @@ contains
     ! sponge layer damping
     !
     !***************************************************************
-    !
-    !
-    ! vertical diffusion
-    !
-    call t_startf('vertical_molec_diff')
-    if (molecular_diff>1) then
-      do ie=nets,nete
-        call get_rho_dry(elem(ie)%state%Qdp(:,:,:,1:qsize,qn0),  &
-             elem(ie)%state%T(:,:,:,nt),ptop,elem(ie)%state%dp3d(:,:,:,nt),&
-             .true.,rhoi_dry=rhoi_dry(:,:,:),                           &
-             active_species_idx_dycore=thermodynamic_active_species_idx_dycore)
-        !
-        ! constant coefficients
-        !
-        do k=1,ksponge_end+1
-           kmvisi(:,:,k) = kmvisi_ref(k)*rhoi_dry(:,:,k)
-           kmcndi(:,:,k) = kmcndi_ref(k)*rhoi_dry(:,:,k)
-        end do
-        !
-        ! do vertical diffusion
-        !
-        do j=1,np
-          do i=1,np
-            call solve_diffusion(dt2,np,nlev,i,j,ksponge_end,pmid,pint,kmcndi(:,:,:)/cpair,elem(ie)%state%T(:,:,:,nt),&
-                 0,dtemp)
-            call solve_diffusion(dt2,np,nlev,i,j,ksponge_end,pmid,pint,kmvisi(:,:,:),elem(ie)%state%v(:,:,1,:,nt),1,du)
-            call solve_diffusion(dt2,np,nlev,i,j,ksponge_end,pmid,pint,kmvisi(:,:,:),elem(ie)%state%v(:,:,2,:,nt),1,dv)
-            do k=1,ksponge_end
-              v1    = elem(ie)%state%v(i,j,1,k,nt)
-              v2    = elem(ie)%state%v(i,j,2,k,nt)
-              v1new = v1 + du(k)
-              v2new = v2 + dv(k)
-              !
-              ! frictional heating
-              !
-              heating = 0.5_r8*((v1new*v1new+v2new*v2new) - (v1*v1+v2*v2))
-              elem(ie)%state%T(i,j,k,nt)=elem(ie)%state%T(i,j,k,nt) &
-                   -heating*inv_cp_full(i,j,k,ie)+dtemp(k)
-              elem(ie)%state%v(i,j,1,k,nt)=v1new
-              elem(ie)%state%v(i,j,2,k,nt)=v2new
-            end do
-          end do
-        end do
-      end do
-    end if
-    call t_stopf('vertical_molec_diff')
+
     call t_startf('sponge_diff')
     !
     ! compute coefficients for horizontal diffusion
     !
-    if (molecular_diff>0) then
+    if (molecular_diff==1) then
       do ie=nets,nete
         call get_rho_dry(elem(ie)%state%Qdp(:,:,:,1:qsize,qn0),  &
              elem(ie)%state%T(:,:,:,nt),ptop,elem(ie)%state%dp3d(:,:,:,nt),&
@@ -855,26 +808,14 @@ contains
              active_species_idx_dycore=thermodynamic_active_species_idx_dycore)
       end do
 
-      if (molecular_diff==1) then
-        do ie=nets,nete
-          !
-          ! compute molecular diffusion and thermal conductivity coefficients at mid-levels
-          !
-          call get_molecular_diff_coef(elem(ie)%state%T(:,:,:,nt),.false.,km_sponge_factor(1:ksponge_end),kmvis(:,:,:,ie),kmcnd(:,:,:,ie),qsize,&
-               elem(ie)%state%Qdp(:,:,:,1:qsize,qn0),fact=1.0_r8/elem(ie)%state%dp3d(:,:,1:ksponge_end,nt),&
-               active_species_idx_dycore=thermodynamic_active_species_idx_dycore)
-        end do
-      else
+      do ie=nets,nete
         !
-        ! constant coefficients
+        ! compute molecular diffusion and thermal conductivity coefficients at mid-levels
         !
-        do ie=nets,nete
-          do k=1,ksponge_end
-            kmvis  (:,:,k,ie) = kmvis_ref(k)
-            kmcnd  (:,:,k,ie) = kmcnd_ref(k)
-          end do
-        end do
-      end if
+        call get_molecular_diff_coef(elem(ie)%state%T(:,:,:,nt),.false.,km_sponge_factor(1:ksponge_end),kmvis(:,:,:,ie),kmcnd(:,:,:,ie),qsize,&
+             elem(ie)%state%Qdp(:,:,:,1:qsize,qn0),fact=1.0_r8/elem(ie)%state%dp3d(:,:,1:ksponge_end,nt),&
+             active_species_idx_dycore=thermodynamic_active_species_idx_dycore)
+      end do
       !
       ! diagnostics
       !
@@ -928,7 +869,7 @@ contains
       rhypervis_subcycle=1.0_r8/real(hypervis_subcycle_sponge,kind=r8)
       do ie=nets,nete
         do k=1,ksponge_end
-          if (nu_top>0.or.molecular_diff>1) then
+          if (nu_top>0.or.molecular_diff>0) then
             !**************************************************************
             !
             ! traditional sponge formulation (constant coefficients)
@@ -2244,79 +2185,5 @@ contains
     !------------
     return
   end subroutine fill_element
-
-  subroutine rayleigh_friction(elem,nt,nets,nete,dt)
-    use dimensions_mod, only: nlev, otau
-    use hybrid_mod,     only: hybrid_t!, get_loop_ranges
-    use element_mod,    only: element_t
-
-    type (element_t)   , intent(inout), target :: elem(:)
-    integer            , intent(in)   :: nets,nete, nt
-    real(r8)                          :: dt
-
-    real(r8) :: c1, c2
-    integer  :: k,ie
-
-    do ie=nets,nete
-      do k=1,nlev
-        c2 = 1._r8 / (1._r8 + otau(k)*dt)
-        c1 = -otau(k) * c2 * dt
-        elem(ie)%state%v(:,:,:,k,nt) = elem(ie)%state%v(:,:,:,k,nt)+c1 * elem(ie)%state%v(:,:,:,k,nt)
-!         ptend%s(:ncol,k) = c3 * (state%u(:ncol,k)**2 + state%v(:ncol,k)**2)
-      enddo
-    end do
-  end subroutine rayleigh_friction
-
-
-
-  subroutine solve_diffusion(dt,nx,nlev,i,j,nlay,pmid,pint,km,fld,boundary_condition,dfld)
-    use dynconst,      only: gravit
-    real(kind=r8), intent(in)    :: dt
-    integer      , intent(in)    :: nlay, nlev,nx, i, j
-    real(kind=r8), intent(in)    :: pmid(nx,nx,nlay),pint(nx,nx,nlay+1),km(nx,nx,nlay+1)
-    real(kind=r8), intent(in)    :: fld(nx,nx,nlev)
-    real(kind=r8), intent(out)   :: dfld(nlay)
-    integer :: boundary_condition
-    !
-    real(kind=r8), dimension(nlay) :: current_guess,next_iterate
-    real(kind=r8)                  :: alp, alm, value_level0
-    integer                        :: k,iter, niterations=4
-
-    ! Make the guess for the next time step equal to the initial value
-    current_guess(:)= fld(i,j,1:nlay)
-    do iter = 1, niterations
-      ! two formulations of the upper boundary condition
-      !next_iterate(1) = (initial_value(1) + alp * current_guess(i+1) + alm * current_guess(1)) /(1. + alp + alm) ! top BC, u'=0
-      if (boundary_condition==0) then
-        next_iterate(1) = fld(i,j,1) ! u doesn't get prognosed by diffusion at top
-      else if (boundary_condition==1) then
-        value_level0 = 0.75_r8*fld(i,j,1) ! value above sponge
-        k=1
-        alp = dt*(km(i,j,k+1)*gravit*gravit/(pmid(i,j,k)-pmid(i,j,k+1)))/(pint(i,j,k)-pint(i,j,k+1))
-        alm = dt*(km(i,j,k  )*gravit*gravit/(0.5_r8*(pmid(i,j,1)-pmid(i,j,2))))/(pint(i,j,k)-pint(i,j,k+1))
-        next_iterate(k) = (fld(i,j,k) + alp * current_guess(k+1) + alm * value_level0)/(1._r8 + alp + alm)
-      else
-        !
-        ! set fld'=0 at model top
-        !
-        k=1
-        alp = dt*(km(i,j,k+1)*gravit*gravit/(pmid(i,j,k)-pmid(i,j,k+1)))/(pint(i,j,k)-pint(i,j,k+1))
-        alm = dt*(km(i,j,k  )*gravit*gravit/(0.5_r8*(pmid(i,j,1)-pmid(i,j,2))))/(pint(i,j,k)-pint(i,j,k+1))
-        next_iterate(k) = (fld(i,j,1) + alp * current_guess(2) + alm * current_guess(1))/(1._r8 + alp + alm)
-      end if
-      do k = 2, nlay-1
-        alp = dt*(km(i,j,k+1)*gravit*gravit/(pmid(i,j,k  )-pmid(i,j,k+1)))/(pint(i,j,k)-pint(i,j,k+1))
-        alm = dt*(km(i,j,k  )*gravit*gravit/(pmid(i,j,k-1)-pmid(i,j,k  )))/(pint(i,j,k)-pint(i,j,k+1))
-        next_iterate(k) = (fld(i,j,k) + alp * current_guess(k+1) + alm * current_guess(k-1))/(1._r8 + alp + alm)
-      end do
-      next_iterate(nlay) = (fld(i,j,nlay) + alp * fld(i,j,nlay) + alm * current_guess(nlay-1))/(1._r8 + alp + alm) ! bottom BC
-
-      ! before the next iterate, make the current guess equal to the values of the last iteration
-      current_guess(:) = next_iterate(:)
-    end do
-    dfld(:) = next_iterate(:) - fld(i,j,1:nlay)
-
-  end subroutine solve_diffusion
-
 
 end module prim_advance_mod

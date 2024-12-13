@@ -826,9 +826,6 @@ subroutine thermodynamic_consistency(phys_state, const_data_ptr, phys_tend, ncol
    use physconst,         only: cpair
    use air_composition,   only: get_cp
 
-   ! SE dycore:
-   use control_mod,       only: phys_dyn_cp
-
    type(physics_state), intent(in)    :: phys_state
    real(kind_phys), pointer           :: const_data_ptr(:,:,:)
    type(physics_tend ), intent(inout) :: phys_tend

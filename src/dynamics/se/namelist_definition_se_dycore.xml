@@ -89,66 +89,16 @@
       <value hgrid="ne120np4">4</value>
     </values>
   </entry>
-  <entry id="se_rayk0">
-    <type>integer</type>
-    <category>se</category>
-    <group>dyn_se_nl</group>
-    <desc>
-      Variable to specify the vertical index at which the
-      Rayleigh friction term is centered (the peak value).
-      Default: 2
-    </desc>
-    <values>
-      <value>2</value>
-    </values>
-  </entry>
-  <entry id="se_raykrange">
-    <type>real</type>
-    <category>se</category>
-    <group>dyn_se_nl</group>
-    <desc>
-      Rayleigh friction parameter to determine the width of the profile.  If set
-      to 0 then a width is chosen by the algorithm (see rayleigh_friction.F90).
-      Default: 0.5.
-    </desc>
-    <values>
-      <value>0.5</value>
-      <value waccm_phys="1">3</value>
-    </values>
-  </entry>
-  <entry id="se_raytau0">
-    <type>real</type>
-    <category>se</category>
-    <group>dyn_se_nl</group>
-    <desc>
-      Rayleigh friction parameter to determine the approximate value of the decay
-      time (days) at model top.  If 0.0 then no Rayleigh friction is applied.
-      Default: 0.
-    </desc>
-    <values>
-      <value>0.0</value>
-    </values>
-  </entry>
   <entry id="se_molecular_diff">
     <type>real</type>
     <category>se</category>
     <group>dyn_se_nl</group>
     <desc>
-      Used by SE dycore to apply sponge layer diffusion to u, v, and T for
-      stability of WACCM configurations. The diffusion is modeled on 3D molecular
-      diffusion and thermal conductivity by using actual molecular diffusion and
-      thermal conductivity coefficients multiplied by the value of
-      se_molecular_diff.
-
-      If set &lt;= 0.0 then the code is not activated.  If set &gt; 0.0 then
-      the molecular diffusion and thermal conductivity coefficients will be
-      multiplied by a factor of se_molecular_diff.
-
-      Default: 0.
+      Enable thermal conductivity and molecular diffusion in the horizontal in SE dycore.
     </desc>
     <values>
       <value>0.0</value>
-      <value waccm_phys="1" waccmx="0">100.0</value>
+      <value waccmx="1">1.0</value>
     </values>
   </entry>
   <entry id="se_hypervis_subcycle_q">
@@ -253,22 +203,6 @@
       <value hgrid="ne30np4" npg="3" waccm_phys="1">5</value>
       <value hgrid="ne0np4CONUS.ne30x8">6</value>
       <value hgrid="ne0np4TESTONLY.ne5x4">7</value>
-    </values>
-  </entry>
-  <entry id="se_phys_dyn_cp">
-    <type>integer</type>
-    <category>se</category>
-    <group>dyn_se_nl</group>
-    <valid_values>0,1,2</valid_values>
-    <desc>
-      Scaling of temperature increment for different levels of
-      thermal energy consistency.
-      0: no scaling
-      1: scale increment for cp consistency between dynamics and physics
-      2: do 1 as well as take into account condensate effect on thermal energy
-    </desc>
-    <values>
-      <value>1</value>
     </values>
   </entry>
   <entry id="se_nu">
