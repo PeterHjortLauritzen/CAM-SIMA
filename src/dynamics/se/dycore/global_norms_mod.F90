@@ -212,7 +212,7 @@ contains
 
     use reduction_mod,  only: ParallelMin,ParallelMax
     use dynconst,       only: ra, rearth, cpair
-    use control_mod,    only: nu, nu_div, nu_q, nu_p, nu_s, nu_top, fine_ne, rk_stage_user, max_hypervis_courant
+    use control_mod,    only: nu, nu_div, nu_q, nu_p, nu_t, nu_top, fine_ne, rk_stage_user, max_hypervis_courant
     use control_mod,    only: tstep_type, hypervis_power, hypervis_scaling
     use cam_abortutils, only: endrun
     use parallel_mod,   only: global_shared_buf, global_shared_sum
@@ -573,7 +573,7 @@ contains
     end if
 
     if (nu_q<0) nu_q = nu_p ! necessary for consistency
-    if (nu_s<0) nu_s = nu_p ! temperature damping is always equal to nu_p
+    if (nu_t<0) nu_t = nu_p ! temperature damping is always equal to nu_p
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
