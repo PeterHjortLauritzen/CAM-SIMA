@@ -68,7 +68,6 @@ contains
     use hybvcoord_mod,     only: hvcoord_t
     use hybrid_mod,        only: hybrid_t
     use time_mod,          only: TimeLevel_t,  timelevel_qdp, tevolve
-    use dimensions_mod,    only: lcp_moist
     use fvm_control_volume_mod, only: fvm_struct
     use control_mod,       only: raytau0
 
@@ -146,16 +145,10 @@ contains
     !
     ! compute Cp and kappa=Rdry/cpdry here and not in RK-stages since Q stays constant => Cp and kappa also stays constant
     !
-    if (lcp_moist) then
-      do ie=nets,nete
-        call get_cp(qwater(:,:,:,:,ie), &
-                   .true.,inv_cp_full(:,:,:,ie),active_species_idx_dycore=qidx)
-      end do
-    else
-      do ie=nets,nete
-        inv_cp_full(:,:,:,ie) = 1.0_r8/cpair
-      end do
-    end if
+    do ie=nets,nete
+      call get_cp(qwater(:,:,:,:,ie), &
+           .true.,inv_cp_full(:,:,:,ie),active_species_idx_dycore=qidx)
+    end do
     do ie=nets,nete
       call get_kappa_dry(qwater(:,:,:,:,ie),qidx,kappa(:,:,:,ie))
     end do
@@ -1587,7 +1580,7 @@ contains
        cflux(2,2,2) =                (corners(np  ,np+1) - corners(np,np  ))
      endif
    end subroutine distribute_flux_at_corners
-
+!xxx tot_energy_dyn not merged in yet
   subroutine calc_tot_energy_dynamics(elem,fvm,nets,nete,tl,tl_qdp,outfld_name_suffix)
     use dynconst,               only: gravit, cpair, rearth, omega
     use dyn_thermo,             only: get_dp, get_cp
@@ -1601,7 +1594,7 @@ contains
 
     !SE dycore:
     use element_mod,            only: element_t
-    use dimensions_mod,         only: npsq,nlev,np,lcp_moist,nc,ntrac,qsize
+    use dimensions_mod,         only: npsq,nlev,np,nc,ntrac,qsize
     use fvm_control_volume_mod, only: fvm_struct
     use dimensions_mod,         only: cnst_name_gll
     !------------------------------Arguments--------------------------------
@@ -1683,14 +1676,7 @@ contains
               ! kinetic energy
               !
               ke_tmp   = 0.5_r8*(elem(ie)%state%v(i,j,1,k,tl)**2+ elem(ie)%state%v(i,j,2,k,tl)**2)*pdel(i,j,k)/gravit
-              if (lcp_moist) then
-                se_tmp = cp(i,j,k)*elem(ie)%state%T(i,j,k,tl)*pdel(i,j,k)/gravit
-              else
-                !
-                ! using CAM physics definition of internal energy
-                !
-                se_tmp   = cpair*elem(ie)%state%T(i,j,k,tl)*pdel(i,j,k)/gravit
-              end if
+              se_tmp = cp(i,j,k)*elem(ie)%state%T(i,j,k,tl)*pdel(i,j,k)/gravit
               se   (i+(j-1)*np) = se   (i+(j-1)*np) + se_tmp
               ke   (i+(j-1)*np) = ke   (i+(j-1)*np) + ke_tmp
             end do

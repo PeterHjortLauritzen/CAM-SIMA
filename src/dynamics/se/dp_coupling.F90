@@ -838,7 +838,7 @@ subroutine thermodynamic_consistency(phys_state, const_data_ptr, phys_tend, ncol
    real(kind_phys) :: inv_cp(ncols,pver)
    !----------------------------------------------------------------------------
 
-   if (lcp_moist.and.phys_dyn_cp==1) then
+!xxx   if (lcp_moist.and.phys_dyn_cp==1) then lcp_moist removed
      !
      ! scale temperature tendency so that thermal energy increment from physics
      ! matches SE (not taking into account dme adjust)
@@ -849,7 +849,7 @@ subroutine thermodynamic_consistency(phys_state, const_data_ptr, phys_tend, ncol
      call get_cp(const_data_ptr(1:ncols,1:pver,1:num_advected),.true.,inv_cp)
 
      phys_tend%dTdt_total(1:ncols,1:pver) = phys_tend%dTdt_total(1:ncols,1:pver)*cpair*inv_cp
-   end if
+!xxx   end if
 end subroutine thermodynamic_consistency
 
 !=========================================================================================
