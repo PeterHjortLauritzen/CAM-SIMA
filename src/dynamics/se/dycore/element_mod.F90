@@ -45,10 +45,6 @@ module element_mod
     real(kind=r8), allocatable :: phi(:,:,:)                  ! geopotential
     real(kind=r8), allocatable :: omega(:,:,:)                ! vertical velocity
 
-    ! semi-implicit diagnostics: computed in explict-component, reused in Helmholtz-component.
-    real(kind=r8), allocatable :: zeta(:,:,:)                 ! relative vorticity
-    real(kind=r8), allocatable :: div(:,:,:,:)                ! divergence
-
     ! tracer advection fields used for consistency and limiters
     real(kind=r8), allocatable :: dp(:,:,:)                   ! for dp_tracers at physics timestep
     real(kind=r8), allocatable :: divdp(:,:,:)                ! divergence of dp
@@ -60,24 +56,10 @@ module element_mod
     real(kind=r8), allocatable :: FM(:,:,:,:)                 ! momentum forcing
     real(kind=r8), allocatable :: FDP(:,:,:)                  ! save full updated dp right after physics
     real(kind=r8), allocatable :: FT(:,:,:)                   ! temperature forcing
-    real(kind=r8), allocatable :: etadot_prescribed(:,:,:)    ! prescribed vertical tendency
-    real(kind=r8), allocatable :: u_met(:,:,:)                ! zonal component of prescribed meteorology winds
-    real(kind=r8), allocatable :: dudt_met(:,:,:)             ! rate of change of zonal component of prescribed meteorology winds
-    real(kind=r8), allocatable :: v_met(:,:,:)                ! meridional component of prescribed meteorology winds
-    real(kind=r8), allocatable :: dvdt_met(:,:,:)             ! rate of change of meridional component of prescribed meteorology winds
-    real(kind=r8), allocatable :: T_met(:,:,:)                ! prescribed meteorology temperature
-    real(kind=r8), allocatable :: dTdt_met(:,:,:)             ! rate of change of prescribed meteorology temperature
-    real(kind=r8), allocatable :: nudge_factor(:,:,:)         ! nudging factor (prescribed)
-    real(kind=r8), allocatable :: Utnd(:,:)                   ! accumulated U tendency due to nudging towards prescribed met
-    real(kind=r8), allocatable :: Vtnd(:,:)                   ! accumulated V tendency due to nudging towards prescribed met
-    real(kind=r8), allocatable :: Ttnd(:,:)                   ! accumulated T tendency due to nudging towards prescribed met
 
-    real(kind=r8), allocatable :: pecnd(:,:,:)                ! pressure perturbation from condensate
-
-    real(kind=r8) :: ps_met(np,np)     ! surface pressure of prescribed meteorology
-    real(kind=r8) :: dpsdt_met(np,np)  ! rate of change of surface pressure of prescribed meteorology
-
-
+    ! reference profiles
+    real(kind=r8), allocatable :: T_ref(:,:,:)                ! reference temperature
+    real(kind=r8), allocatable :: dp_ref(:,:,:)               ! reference pressure level thickness
   end type derived_state_t
 
   !___________________________________________________________________
@@ -455,7 +437,7 @@ contains
       allocate(elem(i)%state%Qdp(np,np,nlev,qsize_d,2), stat=iret)
       call check_allocate(iret, subname, 'elem%state%Qdp(np,np,nlev,qsize_d,2)', &
                           file=__FILE__, line=__LINE__)
-
+      
       !--------------------------
 
       !Allocate "derived" variables:
@@ -484,16 +466,6 @@ contains
       ! vertical velocity
       allocate(elem(i)%derived%omega(np,np,nlev), stat=iret)
       call check_allocate(iret, subname, 'elem%derived%omega(np,np,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! relative vorticity
-      allocate(elem(i)%derived%zeta(np,np,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%zeta(np,np,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! divergence
-      allocate(elem(i)%derived%div(np,np,nlev,timelevels), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%div(np,np,nlev,timelevels)', &
                           file=__FILE__, line=__LINE__)
 
       ! for dp_tracers at physics timestep
@@ -536,64 +508,14 @@ contains
       call check_allocate(iret, subname, 'elem%derived%FT(np,np,nlev)', &
                           file=__FILE__, line=__LINE__)
 
-      ! prescribed vertical tendency
-      allocate(elem(i)%derived%etadot_prescribed(np,np,nlevp), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%etadot_prescribed(np,np,nlevp)', &
-                          file=__FILE__, line=__LINE__)
+      ! reference temperature profile for hyperviscosity
+      allocate(elem(i)%derived%T_ref(np,np,nlev), stat=iret)
+      call check_allocate(iret, subname, 'elem%derived%T_ref(np,np,nlev)', &
+           file=__FILE__, line=__LINE__)
 
-      ! zonal component of prescribed meteorology winds
-      allocate(elem(i)%derived%u_met(np,np,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%u_met(np,np,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! rate of change of zonal component of prescribed meteorology winds
-      allocate(elem(i)%derived%dudt_met(np,np,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%dudt_met(np,np,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! meridional component of prescribed meteorology winds
-      allocate(elem(i)%derived%v_met(np,np,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%v_met(np,np,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! rate of change of meridional component of prescribed meteorology winds
-      allocate(elem(i)%derived%dvdt_met(np,np,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%dvdt_met(np,np,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! prescribed meteorology temperature
-      allocate(elem(i)%derived%T_met(np,np,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%T_met(np,np,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! rate of change of prescribed meteorology temperature
-      allocate(elem(i)%derived%dTdt_met(np,np,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%dTdt_met(np,np,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! nudging factor (prescribed)
-      allocate(elem(i)%derived%nudge_factor(np,np,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%nudge_factor(np,np,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! accumulated U tendency due to nudging towards prescribed met
-      allocate(elem(i)%derived%Utnd(npsq,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%Utnd(npsq,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! accumulated V tendency due to nudging towards prescribed met
-      allocate(elem(i)%derived%Vtnd(npsq,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%Vtnd(npsq,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! accumulated T tendency due to nudging towards prescribed met
-      allocate(elem(i)%derived%Ttnd(npsq,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%Ttnd(npsq,nlev)', &
-                          file=__FILE__, line=__LINE__)
-
-      ! pressure perturbation from condensate
-      allocate(elem(i)%derived%pecnd(np,np,nlev), stat=iret)
-      call check_allocate(iret, subname, 'elem%derived%pecnd(np,np,nlev)', &
+      ! reference pressure level thickness profile for hyperviscosity
+      allocate(elem(i)%derived%dp_ref(np,np,nlev), stat=iret)
+      call check_allocate(iret, subname, 'elem%derived%dp_ref(np,np,nlev)', &
                           file=__FILE__, line=__LINE__)
 
       !----------------------------
