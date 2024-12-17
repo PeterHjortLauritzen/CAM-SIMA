@@ -205,7 +205,7 @@ contains
     !
     use hybrid_mod,     only: hybrid_t, PrintHybrid
     use element_mod,    only: element_t
-    use dimensions_mod, only: np,ne,nelem,nelemd,nc,nhe,qsize,ntrac,nlev,large_Courant_incr
+    use dimensions_mod, only: np,ne,nelem,nelemd,nc,nhe,use_cslam,nlev,large_Courant_incr
     use dimensions_mod, only: nu_scale_top,nu_div_lev,nu_lev
 
     use quadrature_mod, only: gausslobatto, quadrature_t
@@ -604,7 +604,7 @@ contains
       write(iulog,*) rk_str
       write(iulog,'(a)') '   * Spectral-element advection uses SSP preservation RK3'
       write(iulog,'(a)') '   * Viscosity operators use forward Euler'
-      if (ntrac>0) then
+      if (use_cslam) then
         write(iulog,'(a)') '   * CSLAM uses two time-levels backward trajectory method'
       end if
     end if
@@ -624,7 +624,7 @@ contains
     dt_max_adv             = S_rk/(umax*max_normDinv*lambda_max*ra)
     dt_max_gw              = S_rk/(ugw*max_normDinv*lambda_max*ra)
     dt_max_tracer_se       = S_rk_tracer*min_gw/(umax*max_normDinv*ra)
-    if (ntrac>0) then
+    if (use_cslam) then
       if (large_Courant_incr) then
         dt_max_tracer_fvm      = real(nhe, r8)*(4.0_r8*pi*real(Rearth, r8)/real(4.0_r8*ne*nc, r8))/umax
       else
@@ -653,14 +653,15 @@ contains
       write(iulog,'(a,f10.2,a,f10.2,a)') '* dt_dyn_vis    (hyperviscosity)       ; u,v,T,dM) < ',dt_max_hypervis,&
            's ',dt_dyn_visco_actual,'s'
       if (dt_dyn_visco_actual>dt_max_hypervis) write(iulog,*) 'WARNING: dt_dyn_vis theoretically unstable'
-      write(iulog,'(a,f10.2,a,f10.2,a)') '* dt_tracer_se  (time-stepping tracers ; q       ) < ',dt_max_tracer_se,'s ',&
-           dt_tracer_se_actual,'s'
-      if (dt_tracer_se_actual>dt_max_tracer_se) write(iulog,*) 'WARNING: dt_tracer_se theoretically unstable'
-      write(iulog,'(a,f10.2,a,f10.2,a)') '* dt_tracer_vis (hyperviscosity tracers; q       ) < ',dt_max_hypervis_tracer,'s',&
-           dt_tracer_visco_actual,'s'
-      if (dt_tracer_visco_actual>dt_max_hypervis_tracer) write(iulog,*) 'WARNING: dt_tracer_hypervis theoretically unstable'
-
-      if (ntrac>0) then
+      if (.not.use_cslam) then
+        write(iulog,'(a,f10.2,a,f10.2,a)') '* dt_tracer_se  (time-stepping tracers ; q       ) < ',dt_max_tracer_se,'s ',&
+             dt_tracer_se_actual,'s'
+        if (dt_tracer_se_actual>dt_max_tracer_se) write(iulog,*) 'WARNING: dt_tracer_se theoretically unstable'
+        write(iulog,'(a,f10.2,a,f10.2,a)') '* dt_tracer_vis (hyperviscosity tracers; q       ) < ',dt_max_hypervis_tracer,'s',&
+             dt_tracer_visco_actual,'s'
+        if (dt_tracer_visco_actual>dt_max_hypervis_tracer) write(iulog,*) 'WARNING: dt_tracer_hypervis theoretically unstable'
+      end if
+      if (use_cslam) then
         write(iulog,'(a,f10.2,a,f10.2,a)') '* dt_tracer_fvm (time-stepping tracers ; q       ) < ',dt_max_tracer_fvm,&
              's ',dt_tracer_fvm_actual
         if (dt_tracer_fvm_actual>dt_max_tracer_fvm) write(iulog,*) 'WARNING: dt_tracer_fvm theortically unstable'

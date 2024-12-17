@@ -25,6 +25,7 @@ module dimensions_mod
   integer           , public :: fv_nphys  !physics-grid resolution - the "MAX" is so that the code compiles with NC=0
 
   integer, public, protected :: qsize_d   !SE tracer dimension size
+  logical, public            :: use_cslam = .false. !logical for CSLAM
   integer, public, protected :: ntrac = 0 !FVM tracer dimension size
   integer, public            :: qsize = 0 !qsize is set in dyn_comp
   !

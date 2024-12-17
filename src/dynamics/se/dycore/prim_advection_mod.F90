@@ -62,7 +62,7 @@ contains
 
 
   subroutine Prim_Advec_Init1(par, elem)
-    use dimensions_mod, only: nlev, qsize, nelemd,ntrac
+    use dimensions_mod, only: nlev, qsize, nelemd,ntrac, use_cslam
     use parallel_mod,   only: parallel_t, boundaryCommMethod
     use cam_abortutils, only: check_allocate
     type(parallel_t)    :: par
@@ -82,7 +82,7 @@ contains
     !
     ! Set the number of threads used in the subroutine Prim_Advec_tracers_remap()
     !
-    if (ntrac>0) then
+    if (use_cslam) then
        advec_remap_num_threads = 1
     else
        advec_remap_num_threads = tracer_num_threads
@@ -956,7 +956,7 @@ contains
     use vertremap_mod,          only: remap1
     use hybrid_mod,             only: hybrid_t, config_thread_region,get_loop_ranges, PrintHybrid
     use fvm_control_volume_mod, only: fvm_struct
-    use dimensions_mod,         only: ntrac
+    use dimensions_mod,         only: use_cslam, ntrac
     use dimensions_mod,         only: kord_tr,kord_tr_cslam
     use cam_logfile,            only: iulog
     use dynconst,               only: pi
@@ -1086,7 +1086,7 @@ contains
       call remap1(elem(ie)%state%v(:,:,2,:,np1),np,1,1,1,dp_star_moist,dp_moist,ptop,-1,.false.,kord_uvT)
     enddo
 
-    if (ntrac>0) then
+    if (use_cslam) then
       !
       ! vertical remapping of CSLAM tracers
       !

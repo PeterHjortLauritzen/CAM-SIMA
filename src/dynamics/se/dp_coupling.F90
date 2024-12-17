@@ -329,7 +329,7 @@ subroutine p_d_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_in, tl_f, t
    use bndry_mod,        only: bndry_exchange
    use edge_mod,         only: edgeVpack, edgeVunpack
    use fvm_mapping,      only: phys2dyn_forcings_fvm
-
+   use dimensions_mod,   only: use_cslam
    ! arguments
    type(runtime_options), intent(in)     :: cam_runtime_opts ! Runtime settings object
    type(physics_state),   intent(inout)  :: phys_state
@@ -522,7 +522,13 @@ subroutine p_d_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_in, tl_f, t
       kptr = kptr + 2*nlev
       call edgeVpack(edgebuf, dyn_in%elem(ie)%derived%FT(:,:,:), nlev, kptr, ie)
       kptr = kptr + nlev
+!xxx       if (.not. use_cslam) then
+!xxx         !
+!xxx         ! if using CSLAM qdp is being overwritten with CSLAM values in the dynamics
+!xxx         ! so no need to do boundary exchange of tracer tendency on GLL grid here
+!xxx         !
       call edgeVpack(edgebuf, dyn_in%elem(ie)%derived%FQ(:,:,:,:), nlev*qsize, kptr, ie)
+!xxx end of
    end do
 
    if (iam < par%nprocs) then
@@ -534,8 +540,10 @@ subroutine p_d_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_in, tl_f, t
       call edgeVunpack(edgebuf, dyn_in%elem(ie)%derived%FM(:,:,:,:), 2*nlev, kptr, ie)
       kptr = kptr + 2*nlev
       call edgeVunpack(edgebuf, dyn_in%elem(ie)%derived%FT(:,:,:), nlev, kptr, ie)
+!xxx          if (.not. use_cslam) then
       kptr = kptr + nlev
       call edgeVunpack(edgebuf, dyn_in%elem(ie)%derived%FQ(:,:,:,:), nlev*qsize, kptr, ie)
+!xxx end if
       if (fv_nphys > 0) then
          do k = 1, nlev
             dyn_in%elem(ie)%derived%FM(:,:,1,k) =                             &

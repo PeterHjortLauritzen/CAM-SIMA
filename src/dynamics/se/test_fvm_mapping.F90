@@ -5,7 +5,7 @@ module test_fvm_mapping
 
  !SE dycore:
   use fvm_control_volume_mod, only: fvm_struct
-  use dimensions_mod,         only: np, nelemd, nlev, npsq, ntrac
+  use dimensions_mod,         only: np, nelemd, nlev, npsq, ntrac, use_cslam
   use element_mod,            only: element_t
   implicit none
   private
@@ -252,7 +252,7 @@ contains
         name = 'p2d_'//trim(const_name(m_cnst))//'_err_gll'
         call outfld(TRIM(name), RESHAPE(elem(ie)%derived%fq(:,:,:,nq),(/npsq,nlev/)), npsq, ie)
       end do
-      if (ntrac>0) then
+      if (use_cslam) then
         do nq=ntrac,ntrac
           m_cnst = nq
           name = 'p2f_'//trim(const_name(m_cnst))//'_fvm'
@@ -390,7 +390,7 @@ contains
       call outfld('d2p_scalar', phys_state(lchnk)%omega(1:pcols,1:pver), pcols, lchnk)
       call outfld('d2p_u', phys_state(lchnk)%U(1:pcols,1:pver), pcols, lchnk)
       call outfld('d2p_v', phys_state(lchnk)%V(1:pcols,1:pver), pcols, lchnk)
-      if (ntrac>0) then
+      if (use_cslam) then
         do nq=ntrac,ntrac
           m_cnst = nq
           name = 'f2p_'//trim(const_name(m_cnst))

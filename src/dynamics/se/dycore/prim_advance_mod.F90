@@ -309,7 +309,7 @@ contains
 
 
   subroutine applyCAMforcing(elem,fvm,np1,np1_qdp,dt_dribble,dt_phys,nets,nete,nsubstep)
-    use dimensions_mod,         only: np, nc, nlev, qsize, ntrac
+    use dimensions_mod,         only: np, nc, nlev, qsize, ntrac, use_cslam
     use element_mod,            only: element_t
     use control_mod,            only: ftype, ftype_conserve
     use fvm_control_volume_mod, only: fvm_struct
@@ -332,7 +332,7 @@ contains
 
     character(len=*), parameter :: subname = 'applyCAMforcing (SE)'
 
-    if (ntrac>0) then
+    if (use_cslam) then
       allocate(ftmp_fvm(nc,nc,nlev,ntrac,nets:nete), stat=iret)
       call check_allocate(iret, subname, 'ftmp_fvm(nc,nc,nlev,ntrac,nets:nete)', &
                           file=__FILE__, line=__LINE__)
@@ -368,7 +368,7 @@ contains
       ! do state-update for tracers and "dribbling" forcing for u,v,T
       !
       dt_local            = dt_dribble
-      if (ntrac>0) then
+      if (use_cslam) then
         dt_local_tracer     = dt_dribble
         dt_local_tracer_fvm = dt_phys
         if (nsubstep.ne.1) then
@@ -417,7 +417,7 @@ contains
       else
         ftmp(:,:,:,:,ie) = 0.0_r8
       end if
-      if (ntrac>0.and.dt_local_tracer_fvm>0) then
+      if (use_cslam.and.dt_local_tracer_fvm>0) then
         !
         ! Repeat for the fvm tracers: fc holds tendency (fc_new-fc_old)/dt_physics
         !
@@ -441,7 +441,7 @@ contains
           end do
         end do
       else
-        if (ntrac>0) ftmp_fvm(:,:,:,:,ie) = 0.0_r8
+        if (use_cslam) ftmp_fvm(:,:,:,:,ie) = 0.0_r8
       end if
 
 
@@ -472,13 +472,13 @@ contains
              dt_local*elem(ie)%derived%FM(:,:,:,:)
       end if
     end do
-    if (ntrac>0) then
+    if (use_cslam) then
       call output_qdp_var_dynamics(ftmp_fvm(:,:,:,:,:),nc,ntrac,nets,nete,'PDC')
     else
       call output_qdp_var_dynamics(ftmp(:,:,:,:,:),np,qsize,nets,nete,'PDC')
     end if
     if (ftype==1.and.nsubstep==1) call calc_tot_energy_dynamics(elem,fvm,nets,nete,np1,np1_qdp,'p2d')
-    if (ntrac>0) deallocate(ftmp_fvm)
+    if (use_cslam) deallocate(ftmp_fvm)
   end subroutine applyCAMforcing
 
 
@@ -494,7 +494,7 @@ contains
     !
     use dynconst,       only: gravit, cappa, cpair, tref, lapse_rate
     use dyn_thermo,     only: get_dp_ref
-    use dimensions_mod, only: np, nlev, nc, ntrac, npsq, qsize
+    use dimensions_mod, only: np, nlev, nc, use_cslam, npsq, qsize
     use dimensions_mod, only: hypervis_dynamic_ref_state,ksponge_end
     use dimensions_mod, only: nu_scale_top,nu_lev,kmvis_ref,kmcnd_ref,rho_ref,km_sponge_factor
     use dimensions_mod, only: kmvisi_ref,kmcndi_ref,rhoi_ref
@@ -644,7 +644,7 @@ contains
             enddo
           enddo
 
-          if (ntrac>0) then
+          if (use_cslam) then
             !OMP_COLLAPSE_SIMD
             !DIR_VECTOR_ALIGNED
             do j=1,nc
@@ -696,7 +696,7 @@ contains
         kptr = kbeg - 1 + 2*nlev
         call edgeVunpack(edge3,vtens(:,:,2,kbeg:kend,ie),kblk,kptr,ie)
 
-        if (ntrac>0) then
+        if (use_cslam) then
           do k=kbeg,kend
             temp(:,:,k) = elem(ie)%state%dp3d(:,:,k,nt) / elem(ie)%spheremp  ! STATE before DSS
             corners(0:np+1,0:np+1,k) = 0.0_r8
@@ -706,7 +706,7 @@ contains
         kptr = kbeg - 1 + 3*nlev
         call edgeVunpack(edge3,elem(ie)%state%dp3d(:,:,kbeg:kend,nt),kblk,kptr,ie)
 
-        if (ntrac>0) then
+        if (use_cslam) then
           desc = elem(ie)%desc
 
           kptr = kbeg - 1 + 3*nlev
@@ -920,7 +920,7 @@ contains
             end do
           end if
 
-          if (ntrac>0.and.nu_dp>0) then
+          if (use_cslam.and.nu_dp>0) then
             !
             ! mass flux for CSLAM due to sponge layer diffusion on dp
             !
@@ -968,7 +968,7 @@ contains
         kptr = 2*ksponge_end
         call edgeVunpack(edgeSponge,vtens(:,:,2,1:ksponge_end,ie),kblk,kptr,ie)
 
-        if (ntrac>0.and.nu_dp>0.0_r8) then
+        if (use_cslam.and.nu_dp>0.0_r8) then
           do k=1,ksponge_end
             temp(:,:,k) = elem(ie)%state%dp3d(:,:,k,nt) / elem(ie)%spheremp  ! STATE before DSS
             corners(0:np+1,0:np+1,k) = 0.0_r8
@@ -978,7 +978,7 @@ contains
         kptr = 3*ksponge_end
         call edgeVunpack(edgeSponge,elem(ie)%state%dp3d(:,:,1:ksponge_end,nt),kblk,kptr,ie)
 
-        if (ntrac>0.and.nu_dp>0.0_r8) then
+        if (use_cslam.and.nu_dp>0.0_r8) then
           desc = elem(ie)%desc
 
           kptr = 3*ksponge_end
@@ -1083,7 +1083,7 @@ contains
      use dyn_thermo,      only: get_R_dry
 
      !SE dycore:
-     use dimensions_mod,  only: np, nc, nlev, ntrac, ksponge_end
+     use dimensions_mod,  only: np, nc, nlev, use_cslam, ksponge_end
      use hybrid_mod,      only: hybrid_t
      use element_mod,     only: element_t
      use derivative_mod,  only: derivative_t, divergence_sphere, gradient_sphere, vorticity_sphere
@@ -1349,7 +1349,7 @@ contains
          enddo
 
 
-         if (ntrac>0.and.eta_ave_w.ne.0._r8) then
+         if (use_cslam.and.eta_ave_w.ne.0._r8) then
            !OMP_COLLAPSE_SIMD
            !DIR_VECTOR_ALIGNED
            do j=1,np
@@ -1392,7 +1392,7 @@ contains
        kptr=nlev
        call edgeVunpack(edge3, elem(ie)%state%v(:,:,:,:,np1), 2*nlev, kptr, ie)
 
-       if (ntrac>0.and.eta_ave_w.ne.0._r8) then
+       if (use_cslam.and.eta_ave_w.ne.0._r8) then
          do k=1,nlev
            stashdp3d(:,:,k) = elem(ie)%state%dp3d(:,:,k,np1)/elem(ie)%spheremp(:,:)
          end do
@@ -1403,7 +1403,7 @@ contains
        kptr=kptr+2*nlev
        call edgeVunpack(edge3, elem(ie)%state%dp3d(:,:,:,np1),nlev,kptr,ie)
 
-       if  (ntrac>0.and.eta_ave_w.ne.0._r8) then
+       if  (use_cslam.and.eta_ave_w.ne.0._r8) then
          desc = elem(ie)%desc
 
          call edgeDGVunpack(edge3, corners, nlev, kptr, ie)
@@ -1586,7 +1586,7 @@ contains
     if ( hist_fld_active(name_out1).or.hist_fld_active(name_out2).or.hist_fld_active(name_out3).or.&
          hist_fld_active(name_out4).or.hist_fld_active(name_out5).or.hist_fld_active(name_out6)) then
 
-      if (ntrac>0) then
+      if (use_cslam) then
         ixwv = 1
         call cnst_get_ind('CLDLIQ' , ixcldliq, abort=.false.)
         call cnst_get_ind('CLDICE' , ixcldice, abort=.false.)
@@ -1637,7 +1637,7 @@ contains
         !
         ! mass variables are output on CSLAM grid if using CSLAM else GLL grid
         !
-        if (ntrac>0) then
+        if (use_cslam) then
           if (ixwv>0) then
             cdp_fvm = fvm(ie)%c(1:nc,1:nc,:,ixwv)*fvm(ie)%dp_fvm(1:nc,1:nc,:)
             call util_function(cdp_fvm,nc,nlev,name_out3,ie)

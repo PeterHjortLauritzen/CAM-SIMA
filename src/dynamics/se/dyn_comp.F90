@@ -40,7 +40,7 @@ use shr_sys_mod,            only: shr_sys_flush
 use parallel_mod,           only: par
 use hybrid_mod,             only: hybrid_t
 use dimensions_mod,         only: nelemd, nlev, np, npsq, ntrac, nc, fv_nphys, &
-                                  qsize
+                                  qsize, use_cslam
 use element_mod,            only: element_t, elem_state_t
 use fvm_control_volume_mod, only: fvm_struct
 use time_mod,               only: nsplit
@@ -351,7 +351,15 @@ subroutine dyn_readnl(NLFileName)
    kmax_jet                 = se_kmax_jet
    variable_nsplit          = .false.
    molecular_diff           = se_molecular_diff
-
+   !xxx to merge  pgf_formulation          = se_pgf_formulation
+   !xxx to merge   dribble_in_rsplit_loop   = se_dribble_in_rsplit_loop
+   if (fv_nphys > 0) then
+     ! Use finite volume physics grid and CSLAM for tracer advection
+     use_cslam = .true.
+   else
+     ! Use GLL grid for physics and tracer advection
+     use_cslam = .false.
+   end if
    if (rsplit < 1) then
       call endrun('dyn_readnl: rsplit must be > 0')
    end if
@@ -446,7 +454,7 @@ subroutine dyn_readnl(NLFileName)
          end if
       end if
 
-      if (fv_nphys > 0) then
+      if (use_cslam) then
          write(iulog, '(a)') 'dyn_readnl: physics will run on FVM points; advection by CSLAM'
          write(iulog,'(a,i0)') 'dyn_readnl: se_fv_nphys = ', fv_nphys
       else
@@ -629,7 +637,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
                        file=__FILE__, line=__LINE__)
 
    kord_tr(:) = vert_remap_tracer_alg
-   if (ntrac>0) then
+   if (use_cslam) then
      allocate(kord_tr_cslam(ntrac), stat=iret)
      call check_allocate(iret, subname, 'kord_tr_cslam(ntrac)', &
                          file=__FILE__, line=__LINE__)
@@ -649,7 +657,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
      ! CSLAM tracers are always indexed as in physics
      ! of no CSLAM then SE tracers are always indexed as in physics
      !
-     if (ntrac>0) then
+     if (use_cslam) then
        !
        ! note that in this case qsize = thermodynamic_active_species_num
        !
@@ -672,7 +680,36 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
 
      end if
    end do
-
+#ifdef energy_budget_code
+   do m=1,thermodynamic_active_species_liq_num
+     if (use_cslam) then
+       do mfound=1,qsize
+         if (TRIM(cnst_name(thermodynamic_active_species_liq_idx(m)))==TRIM(cnst_name_gll(mfound))) then
+           thermodynamic_active_species_liq_idx_dycore(m) = mfound
+         end if
+       end do
+     else
+       thermodynamic_active_species_liq_idx_dycore(m) = thermodynamic_active_species_liq_idx(m)
+     end if
+     if (masterproc) then
+       write(iulog,*) sub//": m,thermodynamic_active_species_idx_liq_dycore: ",m,thermodynamic_active_species_liq_idx_dycore(m)
+     end if
+   end do
+   do m=1,thermodynamic_active_species_ice_num
+     if (use_cslam) then
+       do mfound=1,qsize
+         if (TRIM(cnst_name(thermodynamic_active_species_ice_idx(m)))==TRIM(cnst_name_gll(mfound))) then
+           thermodynamic_active_species_ice_idx_dycore(m) = mfound
+         end if
+       end do
+     else
+       thermodynamic_active_species_ice_idx_dycore(m) = thermodynamic_active_species_ice_idx(m)
+     end if
+     if (masterproc) then
+       write(iulog,*) sub//": m,thermodynamic_active_species_idx_ice_dycore: ",m,thermodynamic_active_species_ice_idx_dycore(m)
+     end if
+   end do
+#endif
    !
    ! Initialize the import/export objects
    !
@@ -796,7 +833,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    call addfld ('FT',  (/ 'lev' /), 'A', 'K/s', 'Temperature forcing term on GLL grid',gridname='GLL')
 
    ! Tracer forcing on fvm (CSLAM) grid and internal CSLAM pressure fields
-   if (ntrac>0) then
+   if (use_cslam) then
       do m = 1, ntrac
          call addfld (trim(const_name(m))//'_fvm',  (/ 'lev' /), 'I', 'kg/kg',   &
             trim(const_longname(m)), gridname='FVM')
@@ -850,7 +887,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    !
    ! add dynamical core tracer tendency output
    !
-   if (ntrac>0) then
+   if (use_cslam) then
      do m = 1, num_advected
        call addfld(tottnam(m),(/ 'lev' /),'A','kg/kg/s',trim(const_name(m))//' horz + vert',  &
             gridname='FVM')
@@ -993,6 +1030,7 @@ subroutine dyn_run(dyn_state)
 #endif
 
    ! convert elem(ie)%derived%fq to mass tendency
+!xxx for cslam only merge   if (.not.use_cslam) then
    do ie = nets, nete
       do m = 1, qsize
          do k = 1, nlev
@@ -1005,7 +1043,8 @@ subroutine dyn_run(dyn_state)
          end do
       end do
    end do
-
+   !xxx end if
+!xxx for cslam only merge   if (ftype_conserve>0.and..not.use_cslam) then
    if (ftype_conserve>0) then
      do ie = nets, nete
        do k=1,nlev
@@ -1023,7 +1062,7 @@ subroutine dyn_run(dyn_state)
      end do
    end if
 
-   if (ntrac > 0) then
+   if (use_cslam) then
       do ie = nets, nete
          do m = 1, ntrac
             do k = 1, nlev
@@ -1697,7 +1736,7 @@ subroutine read_inidat(dyn_in)
    ! if CSLAM active then we only advect water vapor and condensate
    ! loading tracers in state%qdp
 
-   if (ntrac > 0) then
+   if (use_cslam) then
       do ie = 1, nelemd
          do nq = 1, thermodynamic_active_species_num
             m_cnst = thermodynamic_active_species_idx(nq)
@@ -1728,7 +1767,7 @@ subroutine read_inidat(dyn_in)
 
    ! interpolate fvm tracers and fvm pressure variables
 
-   if (ntrac > 0) then
+   if (use_cslam) then
       if (par%masterproc) then
          write(iulog,*) 'Initializing dp_fvm from spectral element dp'
       end if
@@ -1876,7 +1915,7 @@ subroutine set_phis(dyn_in)
 
    phis_tmp = 0.0_r8
 
-   if (fv_nphys > 0) then
+   if (use_cslam) then
       allocate(phis_phys_tmp(fv_nphys**2,nelemd), stat=ierr)
       call check_allocate(ierr, subname, 'phis_phys_tmp(fv_nphys**2,nelemd)', &
                           file=__FILE__, line=__LINE__)
@@ -1932,6 +1971,7 @@ subroutine set_phis(dyn_in)
       end if
 
       fieldname = 'PHIS'
+!xxx GLL topo merge      fieldname_gll = 'PHIS_gll'
       if (dyn_field_exists(fh_topo, trim(fieldname))) then
          if (fv_nphys == 0) then
            call read_dyn_var(fieldname, fh_topo, 'ncol', phis_tmp)
@@ -2380,7 +2420,7 @@ subroutine write_dyn_vars(dyn_out)
    integer                      :: ie, m
    !----------------------------------------------------------------------------
 
-   if (ntrac > 0) then
+   if (use_cslam) then
       do ie = 1, nelemd
          call outfld('dp_fvm', RESHAPE(dyn_out%fvm(ie)%dp_fvm(1:nc,1:nc,:),   &
                                        (/nc*nc,nlev/)), nc*nc, ie)

@@ -190,7 +190,7 @@ contains
     use thread_mod,             only: omp_get_thread_num
     use perf_mod   ,            only: t_startf, t_stopf
     use fvm_mod    ,            only: fill_halo_fvm, ghostBufQnhc_h
-    use dimensions_mod,         only: ntrac,fv_nphys, ksponge_end
+    use dimensions_mod,         only: use_cslam,fv_nphys
 
     type (element_t) , intent(inout) :: elem(:)
     type(fvm_struct), intent(inout)  :: fvm(:)
@@ -341,7 +341,7 @@ contains
       call prim_printstate(elem, tl, hybrid,nets,nete, fvm, omega_cn)
     end if
 
-    if (ntrac>0.and.nsubstep==nsplit.and.nc.ne.fv_nphys) then
+    if (use_cslam.and.nsubstep==nsplit.and.nc.ne.fv_nphys) then
       !
       ! fill the fvm halo for mapping in d_p_coupling if
       ! physics grid resolution is different than fvm resolution
@@ -377,7 +377,7 @@ contains
     use prim_advection_mod,     only: prim_advec_tracers_remap, prim_advec_tracers_fvm, deriv
     use derivative_mod,         only: subcell_integration
     use hybrid_mod,             only: set_region_num_threads, config_thread_region, get_loop_ranges
-    use dimensions_mod,         only: ntrac,fvm_supercycling,fvm_supercycling_jet
+    use dimensions_mod,         only: use_cslam,fvm_supercycling,fvm_supercycling_jet
     use dimensions_mod,         only: kmin_jet, kmax_jet
     use fvm_mod,                only: ghostBufQnhc_vh,ghostBufQ1_vh, ghostBufFlux_vh
     use fvm_mod,                only: ghostBufQ1_h,ghostBufQnhcJet_h, ghostBufFluxJet_h
@@ -456,7 +456,7 @@ contains
        ! defer final timelevel update until after Q update.
   enddo
 #ifdef HOMME_TEST_SUB_ELEMENT_MASS_FLUX
-    if (ntrac>0.and.rstep==1) then
+    if (use_cslam.and.rstep==1) then
       do ie=nets,nete
       do k=1,nlev
         tempdp3d = elem(ie)%state%dp3d(:,:,k,tl%np1) - &
@@ -500,10 +500,10 @@ contains
     ! special case in CAM: if CSLAM tracers are turned on , qsize=1 but this tracer should
     ! not be advected.  This will be cleaned up when the physgrid is merged into CAM trunk
     ! Currently advecting all species
-    if (qsize > 0) then
+    if (qsize > 0) then !xxx change when not double advecting
 
       call t_startf('prim_advec_tracers_remap')
-      if(ntrac>0) then
+      if(use_cslam) then
         ! Deactivate threading in the tracer dimension if this is a CSLAM run
         region_num_threads = 1
       else
@@ -511,7 +511,7 @@ contains
       endif
       call omp_set_nested(.true.)
       !$OMP PARALLEL NUM_THREADS(region_num_threads), DEFAULT(SHARED), PRIVATE(hybridnew)
-      if(ntrac>0) then
+      if(use_cslam) then
         ! Deactivate threading in the tracer dimension if this is a CSLAM run
         hybridnew = config_thread_region(hybrid,'serial')
       else
@@ -525,7 +525,7 @@ contains
     !
     ! only run fvm transport every fvm_supercycling rstep
     !
-    if (ntrac>0) then
+    if (use_cslam) then
       !
       ! FVM transport
       !

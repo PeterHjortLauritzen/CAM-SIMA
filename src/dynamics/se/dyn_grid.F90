@@ -42,7 +42,7 @@ use cam_abortutils,         only: endrun, check_allocate
 
 !SE dycore:
 use dimensions_mod,         only: globaluniquecols, nelem, nelemd, nelemdmax, &
-                                  ne, np, npsq, fv_nphys, nlev, nlevp, nc, ntrac
+                                  ne, np, npsq, fv_nphys, nlev, use_cslam, nlevp, nc
 use element_mod,            only: element_t
 use fvm_control_volume_mod, only: fvm_struct
 use hybvcoord_mod,          only: hvcoord_t
@@ -248,7 +248,7 @@ subroutine model_grid_init()
    if (iam < par%nprocs) then
 
       call prim_init1(elem, fvm, par, TimeLevel)
-      if (fv_nphys > 0) then
+      if (use_cslam) then
          call dp_init(elem, fvm)
       end if
 
@@ -938,7 +938,7 @@ subroutine define_cam_grids()
    ! Create FVM grid object for CSLAM
    !---------------------------------
 
-   if (ntrac > 0) then
+   if (use_cslam) then
 
       ncols_fvm = nc * nc * nelemd
       ngcols_fvm = nc * nc * nelem_d
