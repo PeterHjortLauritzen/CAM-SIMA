@@ -26,6 +26,7 @@ module fvm_mod
 
   type (EdgeBuffer_t) :: edgeveloc
   type (EdgeBuffer_t), public  :: ghostBufQnhc_s
+  type (EdgeBuffer_t), public  :: ghostBufQnhc_t1
   type (EdgeBuffer_t), public  :: ghostBufQnhc_vh
   type (EdgeBuffer_t), public  :: ghostBufQnhc_h
   type (EdgeBuffer_t), public  :: ghostBufQ1_h
@@ -35,6 +36,7 @@ module fvm_mod
   type (EdgeBuffer_t), public  :: ghostBufQnhcJet_h
   type (EdgeBuffer_t), public  :: ghostBufFluxJet_h
   type (EdgeBuffer_t), public  :: ghostBufPG_s
+  type (EdgeBuffer_t), public  :: ghostBuf_cslam2gll
 
   interface fill_halo_fvm
      module procedure fill_halo_fvm_noprealloc
@@ -65,7 +67,7 @@ contains
     !
     !
      
-    if(kmin .ne. 1 .or. kmax .ne. nlev) then 
+    if(kmin .ne. 1 .or. kmax .ne. nlev) then
        print *,'WARNING: fill_halo_fvm_noprealloc does not support the passing of non-contigous arrays'
        print *,'WARNING:   incorrect answers are likely'
     endif
@@ -118,7 +120,7 @@ subroutine fill_halo_fvm_prealloc(cellghostbuf,elem,fvm,hybrid,nets,nete,ndepth,
     integer,intent(in)                        :: ndepth     ! depth of halo
     integer,intent(in)                        :: kmin,kmax  ! min and max vertical level 
     integer,intent(in)                        :: ksize      ! the total number of vertical 
-    logical, optional                         :: active     ! indicates if te current thread is active 
+    logical, optional                         :: active     ! indicates if te current thread is active
     integer                                   :: ie,i1,i2,kblk,q,kptr
     !
     !
@@ -134,7 +136,7 @@ subroutine fill_halo_fvm_prealloc(cellghostbuf,elem,fvm,hybrid,nets,nete,ndepth,
     i2=nc+ndepth
     kblk = kmax-kmin+1
     if(FVM_TIMERS) call t_startf('FVM:pack')
-    if(lactive) then 
+    if(lactive) then
     do ie=nets,nete
        kptr = kmin-1
        call ghostpack(cellghostbuf, fvm(ie)%dp_fvm(i1:i2,i1:i2,kmin:kmax),kblk, kptr,ie)
@@ -150,7 +152,7 @@ subroutine fill_halo_fvm_prealloc(cellghostbuf,elem,fvm,hybrid,nets,nete,ndepth,
     if(FVM_TIMERS) call t_stopf('FVM:Communication')
     !-----------------------------------------------------------------------------------!                        
     if(FVM_TIMERS) call t_startf('FVM:Unpack')
-    if(lactive) then 
+    if(lactive) then
     do ie=nets,nete
        kptr = kmin-1
        call ghostunpack(cellghostbuf, fvm(ie)%dp_fvm(i1:i2,i1:i2,kmin:kmax),kblk, kptr,ie)
@@ -493,6 +495,7 @@ subroutine fill_halo_fvm_prealloc(cellghostbuf,elem,fvm,hybrid,nets,nete,ndepth,
     ! changes the values for reverse
 
     call initghostbuffer(hybrid%par,ghostBufQnhc_s,elem,nlev*(ntrac+1),nhc,nc,nthreads=1)
+    call initghostbuffer(hybrid%par,ghostBufQnhc_t1,elem,nlev, nhc,nc,nthreads=1)
     call initghostbuffer(hybrid%par,ghostBufQnhc_h,elem,nlev*(ntrac+1),nhc,nc,nthreads=horz_num_threads)
     call initghostbuffer(hybrid%par,ghostBufQnhc_vh,elem,nlev*(ntrac+1),nhc,nc,nthreads=vert_num_threads*horz_num_threads)
     klev = kmax_jet-kmin_jet+1
@@ -500,13 +503,14 @@ subroutine fill_halo_fvm_prealloc(cellghostbuf,elem,fvm,hybrid,nets,nete,ndepth,
     call initghostbuffer(hybrid%par,ghostBufQ1_vh,elem,klev*(ntrac+1),1,nc,nthreads=vert_num_threads*horz_num_threads)
 !    call initghostbuffer(hybrid%par,ghostBufFlux_h,elem,4*nlev,nhe,nc,nthreads=horz_num_threads)
     call initghostbuffer(hybrid%par,ghostBufFlux_vh,elem,4*nlev,nhe,nc,nthreads=vert_num_threads*horz_num_threads)
+    call initghostbuffer(hybrid%par,ghostBuf_cslam2gll,elem,nlev*thermodynamic_active_species_num,nhc,nc,nthreads=1)
     !
     ! preallocate buffers for physics-dynamics coupling
     !
     if (fv_nphys.ne.nc) then
        call initghostbuffer(hybrid%par,ghostBufPG_s,elem,nlev*(4+ntrac),nhc_phys,fv_nphys,nthreads=1)
     else
-       call initghostbuffer(hybrid%par,ghostBufPG_s,elem,nlev*(3+thermodynamic_active_species_num),nhc_phys,fv_nphys,nthreads=1)
+       call initghostbuffer(hybrid%par,ghostBufPG_s,elem,nlev*3,nhc_phys,fv_nphys,nthreads=1)
     end if
 
     if (fvm_supercycling.ne.fvm_supercycling_jet) then

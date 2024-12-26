@@ -259,22 +259,59 @@
       <value se_refined_mesh="1">2.0e5</value>
     </values>
   </entry>
-  <entry id="se_hypervis_dynamic_ref_state">
-    <type>logical</type>
+  <entry id="se_sponge_del4_nu_fac">
+    <type>real</type>
     <category>se</category>
     <group>dyn_se_nl</group>
     <desc>
-      Hyperscosity for T and dp is applied to (T-Tref) and (dp-dp_ref) where
-      Xref are reference states where the effect of topography has been removed
-      (Simmons and Jiabin, 1991, QJRMS, Section 2a).
-      If TRUE dp_ref is dynamic smoothed reference state derived by Patrick Callaghan
-      (Lauritzen et al., 2018, JAMES, Appendix A.2) and temperature reference state
-      based on Simmons and Jiabin (1991) but using smoothed dp_ref.
-      If FALSE Tref is static reference state (Simmons and Jiabin) and dp_ref state
-      derived from hydrostatic balance.
+      Hyperviscosity coefficient se_nu [m^4/s] for u,v, T is increased to
+      se_nu_p*se_sponge_del4_nu_fac following a hyperbolic tangent function
+      centered around pressure at vertical index se_sponge_del4_lev:
+
+      0.5_r8*(1.0_r8+tanh(2.0_r8*log(pmid(se_sponge_del4_lev)/press)))
+
+      where press is pressure
+
+      If &lt; 0, se_sponge_del4_nu_fac is automatically set based on model top location.
+      Default: Set by build-namelist.
     </desc>
     <values>
-      <value>.false.</value>
+      <value>-1</value>
+    </values>
+  </entry>
+  <entry id="se_sponge_del4_nu_div_fac">
+    <type>real</type>
+    <category>se></category>
+    <group>dyn_se_nl</group>
+    <desc>
+      Divergence damping hyperviscosity coefficient se_nu_div [m^4/s] for u,v is increased to
+      se_nu_p*se_sponge_del4_nu_div_fac following a hyperbolic tangent function
+      centered around pressure at vertical index se_sponge_del4_lev:
+
+      0.5_r8*(1.0_r8+tanh(2.0_r8*log(pmid(se_sponge_del4_lev)/press)))
+
+      where press is pressure
+
+      If &lt; 0, se_sponge_del4_nu_div_fac is automatically set based on model top location.
+    </desc>
+    <values>
+      <value>-1</value>
+    </values>
+  </entry>
+  <entry id="se_sponge_del4_lev">
+    <type>real</type>
+    <category>se></category>
+    <group>dyn_se_nl</group>    
+    <desc>
+      Level index around which increased del4 damping is centered.
+
+      See se_sponge_del4_nu_fac and se_sponge_del4_nu_div_fac
+
+      If &lt; 0, se_sponge_del4_lev is automatically set based on model top location.
+      Default: Set by build-namelist.
+    </desc>
+    <values>
+      <value>-1</value>
     </values>
   </entry>
   <entry id="se_large_Courant_incr">
@@ -605,6 +642,44 @@
     </desc>
     <values>
       <value>0</value>
+    </values>
+  </entry>
+  <entry id="se_pgf_formulation">
+    <type>integer</type>
+    <category>se</category>
+    <group>dyn_se_nl</group>
+    <valid_values>1,2,3</valid_values>
+    <desc>
+      1: Exner version of pressure gradient force (PGF)
+      see Appendix A in https://agupubs.onlinelibrary.wiley.com/doi/epdf/10.1029/2022MS003192
+
+      2: Traditional pressure gradient formulation (grad p)
+
+      3: Hybrid (formulation 1 where hybm>0 else formulation 2)
+      Use hybrid PGF option for WACCM-x to make WACCM-x consistent with PGF
+      used in CAM in the troposphere and traditional PGF formulation above
+    </desc>
+    <values>
+      <value>1</value>
+      <value waccmx="1">3</value>
+    </values>
+  </entry>
+  <entry id="se_dribble_in_rsplit_loop">
+    <type>integer</type>
+    <category>se</category>
+    <group>dyn_se_nl</group>
+    <valid_values>0,1</valid_values>
+    <desc>
+      0: physics tendencies will be added every vertical remapping time-step (dt_phys/se_nsplit)
+      for se_ftype=0,2
+
+      1: physics tendencies will be added every dynamics time-step (dt_phys/se_nsplit*se_rsplit)
+      for se_ftype=0,2
+
+      If se_ftype=1 then se_dribble_in_rsplit_loop has no effect since physics tendencies are added as an adjustment
+    </desc>
+    <values>
+      <value>1</value>
     </values>
   </entry>
 </entry_id_pg>

@@ -1,5 +1,6 @@
 module dimensions_mod
   use shr_kind_mod, only: r8=>shr_kind_r8
+  use air_composition, only: thermodynamic_active_species_num
 
   implicit none
   private
@@ -29,10 +30,6 @@ module dimensions_mod
   integer, public, protected :: ntrac = 0 !FVM tracer dimension size
   integer, public            :: qsize = 0 !qsize is set in dyn_comp
   !
-  ! hyperviscosity is applied on approximate pressure levels
-  ! Similar to CAM-EUL; see CAM5 scietific documentation (Note TN-486), equation (3.09), page 58.
-  !
-  logical,            public :: hypervis_dynamic_ref_state = .false.
   ! fvm dimensions:
   logical, public :: lprint!for debugging
   integer, parameter, public :: ngpc=3          !number of Gausspoints for the fvm integral approximation   !phl change from 4
@@ -56,19 +53,15 @@ module dimensions_mod
   integer, allocatable, public :: kord_tr(:), kord_tr_cslam(:)
 
   real(r8), allocatable, public :: nu_scale_top(:) ! scaling of del2 viscosity in sponge layer (initialized in dyn_comp)
-  real(r8), allocatable, public :: nu_lev(:)
-  real(r8), allocatable, public :: otau(:)
-
-  integer,  public :: ksponge_end       ! sponge is active k=1,ksponge_end
-  real (r8), allocatable, public :: nu_div_lev(:) ! scaling of viscosity in sponge layer
+  real(r8), allocatable, public :: nu_lev(:)       ! level dependent del4 (u,v) damping
+  real(r8), allocatable, public :: nu_t_lev(:)     ! level depedendet del4 T damping
+  integer,               public :: ksponge_end     ! sponge is active k=1,ksponge_end
+  real(r8), allocatable, public :: nu_div_lev(:)   ! scaling of viscosity in sponge layer
 
   real(r8), allocatable, public :: kmvis_ref(:)        !reference profiles for molecular diffusion
   real(r8), allocatable, public :: kmcnd_ref(:)        !reference profiles for molecular diffusion
   real(r8), allocatable, public :: rho_ref(:)          !reference profiles for rho
   real(r8), allocatable, public :: km_sponge_factor(:) !scaling for molecular diffusion (when used as sponge)
-  real(r8), allocatable, public :: kmvisi_ref(:)       !reference profiles for molecular diffusion
-  real(r8), allocatable, public :: kmcndi_ref(:)       !reference profiles for molecular diffusion
-  real(r8), allocatable, public :: rhoi_ref(:)         !reference profiles for rho
 
   integer,  public :: nhc_phys
   integer,  public :: nhe_phys
@@ -123,13 +116,15 @@ contains
 
      ! Set tracer dimension variables:
      if (fv_nphys > 0) then
-        ! Use CSLAM for tracer advection
-        qsize_d = 10 ! SE tracers (currently SE supports 10 condensate loading tracers)
+       ! Use CSLAM for tracer advection
+        qsize_d = thermodynamic_active_species_num
         ntrac = num_advected
+        use_cslam = .true.
      else
         ! Use GLL for tracer advection
         qsize_d = num_advected
         ntrac = 0 ! No fvm tracers if CSLAM is off
+        use_cslam = .false.
      end if
 
      ! Set grid dimension variables:
@@ -151,8 +146,8 @@ contains
      call check_allocate(iret, subname, 'nu_lev(nlev)', &
                          file=__FILE__, line=__LINE__)
 
-     allocate(otau(nlev), stat=iret)
-     call check_allocate(iret, subname, 'otau(nlev)', &
+     allocate(nu_t_lev(nlev), stat=iret)
+     call check_allocate(iret, subname, 'nu_t_lev(nlev)', &
                          file=__FILE__, line=__LINE__)
 
      allocate(nu_div_lev(nlev), stat=iret)
@@ -173,18 +168,6 @@ contains
 
      allocate(km_sponge_factor(nlev), stat=iret)
      call check_allocate(iret, subname, 'km_sponge_factor(nlev)', &
-                         file=__FILE__, line=__LINE__)
-
-     allocate(kmvisi_ref(nlevp), stat=iret)
-     call check_allocate(iret, subname, 'kmvisi_ref(nlevp)', &
-                         file=__FILE__, line=__LINE__)
-
-     allocate(kmcndi_ref(nlevp), stat=iret)
-     call check_allocate(iret, subname, 'kmcndi_ref(nlevp)', &
-                         file=__FILE__, line=__LINE__)
-
-     allocate(rhoi_ref(nlevp), stat=iret)
-     call check_allocate(iret, subname, 'rhoi_ref(nlevp)', &
                          file=__FILE__, line=__LINE__)
 
   end subroutine dimensions_mod_init

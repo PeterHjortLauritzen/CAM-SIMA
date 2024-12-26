@@ -10,7 +10,11 @@ use runtime_obj,    only: runtime_options
 !SE dycore:
 use parallel_mod,   only: par
 use dimensions_mod, only: nelemd
-
+#ifdef scam
+use scamMod,                only: use_iop, doiopupdate, single_column, &
+                                  setiopupdate, readiopdata
+use se_single_column_mod,   only: scm_setfield, iop_broadcast
+#endif
 implicit none
 private
 save
@@ -26,12 +30,52 @@ contains
 !=========================================================================================
 
 subroutine stepon_init(cam_runtime_opts, dyn_in, dyn_out)
-
+#ifdef constituents
+   use constituents,   only: pcnst, cnst_name, cnst_longname
+   use dimensions_mod, only: fv_nphys, cnst_name_gll, cnst_longname_gll, qsize
+#endif
    ! Dummy arguments
    type(runtime_options), intent(in) :: cam_runtime_opts ! Runtime settings object
    type(dyn_import_t),    intent(in) :: dyn_in           ! Dynamics import container
    type(dyn_export_t),    intent(in) :: dyn_out          ! Dynamics export container
 
+   ! local variables
+   integer :: m, m_cnst
+#ifdef constituents
+   !----------------------------------------------------------------------------
+   ! These fields on dynamics grid are output before the call to d_p_coupling.
+   do m_cnst = 1, qsize
+     call addfld(trim(cnst_name_gll(m_cnst))//'_gll',  (/ 'lev' /), 'I', 'kg/kg',   &
+          trim(cnst_longname_gll(m_cnst)), gridname='GLL')
+     call addfld(trim(cnst_name_gll(m_cnst))//'dp_gll',  (/ 'lev' /), 'I', 'kg/kg',   &
+          trim(cnst_longname_gll(m_cnst))//'*dp', gridname='GLL')
+   end do
+   call addfld('U_gll'     ,(/ 'lev' /), 'I', 'm/s ','U wind on gll grid',gridname='GLL')
+   call addfld('V_gll'     ,(/ 'lev' /), 'I', 'm/s ','V wind on gll grid',gridname='GLL')
+   call addfld('T_gll'     ,(/ 'lev' /), 'I', 'K '  ,'T on gll grid'     ,gridname='GLL')
+   call addfld('dp_ref_gll' ,(/ 'lev' /), 'I', '  '  ,'dp dry / dp_ref on gll grid'     ,gridname='GLL')
+   call addfld('PSDRY_gll' ,horiz_only , 'I', 'Pa ' ,'psdry on gll grid' ,gridname='GLL')
+   call addfld('PS_gll'    ,horiz_only , 'I', 'Pa ' ,'ps on gll grid'    ,gridname='GLL')
+   call addfld('PHIS_gll'  ,horiz_only , 'I', 'Pa ' ,'PHIS on gll grid'  ,gridname='GLL')
+
+   ! Fields for initial condition files
+   call addfld('U&IC',   (/ 'lev' /),  'I', 'm/s', 'Zonal wind',     gridname='GLL' )
+   call addfld('V&IC',   (/ 'lev' /),  'I', 'm/s', 'Meridional wind',gridname='GLL' )
+   ! Don't need to register U&IC V&IC as vector components since we don't interpolate IC files
+   call add_default('U&IC',0, 'I')
+   call add_default('V&IC',0, 'I')
+
+   call addfld('PS&IC', horiz_only,  'I', 'Pa', 'Surface pressure',       gridname='GLL')
+   call addfld('T&IC',  (/ 'lev' /), 'I', 'K',  'Temperature',            gridname='GLL')
+   call add_default('PS&IC', 0, 'I')
+   call add_default('T&IC',  0, 'I')
+
+   do m_cnst = 1,pcnst
+      call addfld(trim(cnst_name(m_cnst))//'&IC', (/ 'lev' /), 'I', 'kg/kg', &
+                  trim(cnst_longname(m_cnst)), gridname='GLL')
+      call add_default(trim(cnst_name(m_cnst))//'&IC', 0, 'I')
+   end do
+#endif
 end subroutine stepon_init
 
 !=========================================================================================
@@ -44,7 +88,7 @@ subroutine stepon_timestep_init(dtime_out, cam_runtime_opts, phys_state,      &
    use dp_coupling,    only: d_p_coupling           ! dynamics-physics coupling
 
    !SE dycore:
-   use time_mod,       only: tstep                  ! dynamics timestep
+   use se_dyn_time_mod,     only: tstep                  ! dynamics timestep
 
    ! Dummy arguments
    real(r8),              intent(out)   :: dtime_out        ! Time-step (s)
@@ -66,14 +110,39 @@ subroutine stepon_timestep_init(dtime_out, cam_runtime_opts, phys_state,      &
       ! write diagnostic fields on gll grid and initial file
       call diag_dynvar_ic(dyn_out%elem, dyn_out%fvm)
    end if
+#ifdef scam
 
+   ! Determine whether it is time for an IOP update;
+   ! doiopupdate set to true if model time step > next available IOP
+
+
+   if (use_iop .and. masterproc) then
+       call setiopupdate
+   end if
+
+   if (single_column) then
+
+     ! If first restart step then ensure that IOP data is read
+     if (is_first_restart_step()) then
+        if (masterproc) call readiopdata( hvcoord%hyam, hvcoord%hybm, hvcoord%hyai, hvcoord%hybi, hvcoord%ps0  )
+        call iop_broadcast()
+     endif
+
+     iop_update_phase1 = .true.
+     if ((is_first_restart_step() .or. doiopupdate) .and. masterproc) then
+        call readiopdata( hvcoord%hyam, hvcoord%hybm, hvcoord%hyai, hvcoord%hybi, hvcoord%ps0  )
+     endif
+     call iop_broadcast()
+
+     call scm_setfield(dyn_out%elem,iop_update_phase1)
+   endif
+#endif
    ! Synchronize all PEs and then transfer dynamics variables to physics:
    call t_barrierf('sync_d_p_coupling', mpicom)
    call t_startf('d_p_coupling')
    ! Move data into phys_state structure.
    call d_p_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_out)
    call t_stopf('d_p_coupling')
-
 end subroutine stepon_timestep_init
 
 !=========================================================================================
@@ -85,9 +154,9 @@ subroutine stepon_run2(cam_runtime_opts, phys_state, phys_tend, dyn_in, dyn_out)
    use dyn_grid,         only: TimeLevel
 
    !SE dycore:
-   use time_mod,         only: TimeLevel_Qdp
+   use se_dyn_time_mod,  only: TimeLevel_Qdp
    use control_mod,      only: qsplit
-   use prim_advance_mod, only: calc_tot_energy_dynamics
+   use prim_advance_mod, only: tot_energy_dyn
 
    ! Dummy arguments
    type(runtime_options), intent(in)    :: cam_runtime_opts ! Runtime settings object
@@ -98,12 +167,12 @@ subroutine stepon_run2(cam_runtime_opts, phys_state, phys_tend, dyn_in, dyn_out)
 
    ! Local variables
    integer :: tl_f, tl_fQdp
+
    !----------------------------------------------------------------------------
 
    !Determine appropriate time values:
    tl_f = TimeLevel%n0   ! timelevel which was adjusted by physics
    call TimeLevel_Qdp(TimeLevel, qsplit, tl_fQdp)
-
    ! Synchronize all PEs and then transfer physics variables to dynamics:
    call t_barrierf('sync_p_d_coupling', mpicom)
    call t_startf('p_d_coupling')
@@ -112,7 +181,7 @@ subroutine stepon_run2(cam_runtime_opts, phys_state, phys_tend, dyn_in, dyn_out)
    call t_stopf('p_d_coupling')
 
    if (iam < par%nprocs) then
-      call calc_tot_energy_dynamics(dyn_in%elem,dyn_in%fvm, 1, nelemd, tl_f, tl_fQdp,'dED')
+      call tot_energy_dyn(dyn_in%elem,dyn_in%fvm, 1, nelemd, tl_f, tl_fQdp,'dED')
    end if
 
 end subroutine stepon_run2
@@ -126,10 +195,12 @@ subroutine stepon_run3(dtime, cam_runtime_opts, cam_out, phys_state, dyn_in, dyn
    !SE/CAM interface:
    use dyn_comp,       only: dyn_run
    use dyn_grid,       only: TimeLevel
+#ifdef scam
+   use advect_tend,    only: compute_write_iop_fields
+#endif
    use advect_tend,    only: compute_adv_tends_xyz
-
    !SE dycore:
-   use time_mod,       only: TimeLevel_Qdp
+   use se_dyn_time_mod,only: TimeLevel_Qdp
    use control_mod,    only: qsplit
 
    ! Dummy arguments
@@ -143,13 +214,26 @@ subroutine stepon_run3(dtime, cam_runtime_opts, cam_out, phys_state, dyn_in, dyn
    ! Local variables
    integer :: tl_f, tl_fQdp
    !--------------------------------------------------------------------------------------
-
+#ifdef scam
+   if (single_column) then
+      ! Update IOP properties e.g. omega, divT, divQ
+      iop_update_phase1 = .false.
+      if (doiopupdate) then
+         if (masterproc) call readiopdata( hvcoord%hyam, hvcoord%hybm, hvcoord%hyai, hvcoord%hybi, hvcoord%ps0  )
+         call iop_broadcast()
+         call scm_setfield(dyn_out%elem,iop_update_phase1)
+      endif
+   endif
+#endif
    ! Determine appropriate time values and
    ! initalize advected constituent mixing ratios:
    call t_startf('comp_adv_tends1')
    tl_f = TimeLevel%n0
    call TimeLevel_Qdp(TimeLevel, qsplit, tl_fQdp)
    call compute_adv_tends_xyz(dyn_in%elem,dyn_in%fvm,1,nelemd,tl_fQdp,tl_f)
+#ifdef scam
+   if (write_camiop) call compute_write_iop_fields(dyn_in%elem,dyn_in%fvm,1,nelemd,tl_fQdp,tl_f)
+#endif
    call t_stopf('comp_adv_tends1')
 
    ! Synchronize all PEs and then run dynamics (dyn_run):
@@ -164,6 +248,9 @@ subroutine stepon_run3(dtime, cam_runtime_opts, cam_out, phys_state, dyn_in, dyn
    tl_f = TimeLevel%n0
    call TimeLevel_Qdp(TimeLevel, qsplit, tl_fQdp)
    call compute_adv_tends_xyz(dyn_in%elem,dyn_in%fvm,1,nelemd,tl_fQdp,tl_f)
+#ifdef scam
+   if (write_camiop) call compute_write_iop_fields(dyn_in%elem,dyn_in%fvm,1,nelemd,tl_fQdp,tl_f)
+#endif
    call t_stopf('comp_adv_tends2')
 
 end subroutine stepon_run3
@@ -192,7 +279,7 @@ subroutine diag_dynvar_ic(elem, fvm)
    use cam_abortutils,         only: endrun, check_allocate
 
    !SE dycore:
-   use time_mod,               only: TimeLevel_Qdp   !  dynamics typestep
+   use se_dyn_time_mod,        only: TimeLevel_Qdp   !  dynamics typestep
    use control_mod,            only: qsplit
    use hybrid_mod,             only: config_thread_region, get_loop_ranges
    use hybrid_mod,             only: hybrid_t

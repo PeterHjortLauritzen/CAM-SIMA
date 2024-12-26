@@ -49,7 +49,7 @@ use hybvcoord_mod,          only: hvcoord_t
 use prim_init,              only: prim_init1
 use edge_mod,               only: initEdgeBuffer
 use edgetype_mod,           only: EdgeBuffer_t
-use time_mod,               only: TimeLevel_t
+use se_dyn_time_mod,        only: TimeLevel_t
 use dof_mod,                only: UniqueCoords, UniquePoints
 
 implicit none
@@ -60,6 +60,7 @@ integer, parameter :: dyn_decomp = 101 ! The SE dynamics grid
 integer, parameter :: fvm_decomp = 102 ! The FVM (CSLAM) grid
 integer, parameter :: physgrid_d = 103 ! physics grid on dynamics decomp
 integer, parameter :: ini_decomp = 104 ! alternate dynamics grid for reading initial file
+integer, parameter :: ini_decomp_scm = 205 ! alternate dynamics grid for reading initial file
 
 character(len=3), protected :: ini_grid_name
 
@@ -135,7 +136,7 @@ subroutine model_grid_init()
    use hybrid_mod,          only: hybrid_t, init_loop_ranges, &
                                   get_loop_ranges, config_thread_region
    use control_mod,         only: qsplit, rsplit
-   use time_mod,            only: tstep, nsplit
+   use se_dyn_time_mod,     only: tstep, nsplit
    use fvm_mod,             only: fvm_init2, fvm_init3, fvm_pg_init
    use dimensions_mod,      only: irecons_tracer, dimensions_mod_init, qsize
    use comp_gll_ctr_vol,    only: gll_grid_write
@@ -779,7 +780,9 @@ subroutine define_cam_grids()
 
    use cam_grid_support, only: horiz_coord_t, horiz_coord_create
    use cam_grid_support, only: cam_grid_register, cam_grid_attribute_register
-
+#ifdef SCAM
+   use scamMod,          only: closeioplon,closeioplat,closeioplonidx,single_column
+#endif
    !SE dycore:
    use dimensions_mod,   only: nc
 
@@ -790,6 +793,7 @@ subroutine define_cam_grids()
    type(horiz_coord_t), pointer :: lat_coord
    type(horiz_coord_t), pointer :: lon_coord
    integer(iMap),       pointer :: grid_map(:,:)
+   integer(iMap),       pointer :: grid_map_scm(:,:) !grid_map decomp for single column mode   
 
    real(r8),        allocatable :: pelat_deg(:)  ! pe-local latitudes (degrees)
    real(r8),        allocatable :: pelon_deg(:)  ! pe-local longitudes (degrees)
@@ -797,6 +801,7 @@ subroutine define_cam_grids()
    real(r8)                     :: areaw(np,np)
    integer(iMap)                :: fdofP_local(npsq,nelemd) ! pe-local map for dynamics decomp
    integer(iMap),   allocatable :: pemap(:)                 ! pe-local map for PIO decomp
+   integer(iMap),   allocatable :: pemap_scm(:)             ! pe-local map for single column PIO decomp
 
    integer                      :: ncols_fvm, ngcols_fvm
    real(r8),        allocatable :: fvm_coord(:)
@@ -933,7 +938,43 @@ subroutine define_cam_grids()
    ! grid_map cannot be deallocated as the cam_filemap_t object just points
    ! to it.  It can be nullified.
    nullify(grid_map)
+#ifdef SCAM
+   !---------------------------------
+   ! Create SCM grid object when running single column mode
+   !---------------------------------
 
+   if ( single_column) then
+      allocate(pemap_scm(1))
+      pemap_scm = 0_iMap
+      pemap_scm = closeioplonidx
+
+      ! Map for scm grid
+      allocate(grid_map_scm(3,npsq))
+      grid_map_scm = 0_iMap
+      mapind = 1
+      j = 1
+      do i = 1, npsq
+         grid_map_scm(1, mapind) = i
+         grid_map_scm(2, mapind) = j
+         grid_map_scm(3, mapind) = pemap_scm(1)
+         mapind = mapind + 1
+      end do
+      latval=closeioplat
+      lonval=closeioplon
+
+      lat_coord => horiz_coord_create('lat', 'ncol', 1,  &
+         'latitude', 'degrees_north', 1, 1, latval, map=pemap_scm)
+      lon_coord => horiz_coord_create('lon', 'ncol', 1,  &
+         'longitude', 'degrees_east', 1, 1, lonval, map=pemap_scm)
+
+      call cam_grid_register('SCM', ini_decomp_scm, lat_coord, lon_coord,         &
+         grid_map_scm, block_indexed=.false., unstruct=.true.)
+      deallocate(pemap_scm)
+      ! grid_map cannot be deallocated as the cam_filemap_t object just points
+      ! to it.  It can be nullified.
+      nullify(grid_map_scm)
+   end if
+#endif
    !---------------------------------
    ! Create FVM grid object for CSLAM
    !---------------------------------

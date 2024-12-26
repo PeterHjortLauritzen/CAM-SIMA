@@ -61,7 +61,7 @@ subroutine d_p_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_out)
 
    !SE dycore:
    use fvm_mapping,            only: dyn2phys_vector, dyn2phys_all_vars
-   use time_mod,               only: timelevel_qdp
+   use se_dyn_time_mod,        only: timelevel_qdp
    use control_mod,            only: qsplit
 
    ! arguments
@@ -521,15 +521,15 @@ subroutine p_d_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_in, tl_f, t
       call edgeVpack(edgebuf, dyn_in%elem(ie)%derived%FM(:,:,:,:), 2*nlev, kptr, ie)
       kptr = kptr + 2*nlev
       call edgeVpack(edgebuf, dyn_in%elem(ie)%derived%FT(:,:,:), nlev, kptr, ie)
-      kptr = kptr + nlev
-!xxx       if (.not. use_cslam) then
-!xxx         !
-!xxx         ! if using CSLAM qdp is being overwritten with CSLAM values in the dynamics
-!xxx         ! so no need to do boundary exchange of tracer tendency on GLL grid here
-!xxx         !
-      call edgeVpack(edgebuf, dyn_in%elem(ie)%derived%FQ(:,:,:,:), nlev*qsize, kptr, ie)
-!xxx end of
-   end do
+      if (.not. use_cslam) then
+        !
+        ! if using CSLAM qdp is being overwritten with CSLAM values in the dynamics
+        ! so no need to do boundary exchange of tracer tendency on GLL grid here
+        !
+        kptr = kptr + nlev
+        call edgeVpack(edgebuf, dyn_in%elem(ie)%derived%FQ(:,:,:,:), nlev*qsize, kptr, ie)
+      end if
+    end do
 
    if (iam < par%nprocs) then
      call bndry_exchange(par, edgebuf, location='p_d_coupling')
@@ -540,10 +540,10 @@ subroutine p_d_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_in, tl_f, t
       call edgeVunpack(edgebuf, dyn_in%elem(ie)%derived%FM(:,:,:,:), 2*nlev, kptr, ie)
       kptr = kptr + 2*nlev
       call edgeVunpack(edgebuf, dyn_in%elem(ie)%derived%FT(:,:,:), nlev, kptr, ie)
-!xxx          if (.not. use_cslam) then
-      kptr = kptr + nlev
-      call edgeVunpack(edgebuf, dyn_in%elem(ie)%derived%FQ(:,:,:,:), nlev*qsize, kptr, ie)
-!xxx end if
+      if (.not. use_cslam) then
+        kptr = kptr + nlev
+        call edgeVunpack(edgebuf, dyn_in%elem(ie)%derived%FQ(:,:,:,:), nlev*qsize, kptr, ie)
+      end if
       if (fv_nphys > 0) then
          do k = 1, nlev
             dyn_in%elem(ie)%derived%FM(:,:,1,k) =                             &
@@ -756,6 +756,7 @@ subroutine derived_phys_dry(cam_runtime_opts, phys_state, phys_tend)
    ! Ensure O2 + O + H (N2) mmr greater than one.
    ! Check for unusually large H2 values and set to lower value.
    !------------------------------------------------------------
+   !xxx this code is NOT in cam_development?
    if (cam_runtime_opts%waccmx_option() == 'ionosphere' .or. &
        cam_runtime_opts%waccmx_option() == 'neutral')  then
 
@@ -822,40 +823,4 @@ subroutine derived_phys_dry(cam_runtime_opts, phys_state, phys_tend)
 #endif
 
 end subroutine derived_phys_dry
-
-!=========================================================================================
-
-subroutine thermodynamic_consistency(phys_state, const_data_ptr, phys_tend, ncols, pver)
-  !
-   ! Adjust the physics temperature tendency for thermal energy consistency with the
-   ! dynamics.
-   ! Note: mixing ratios are assumed to be dry.
-   !
-   use physconst,         only: cpair
-   use air_composition,   only: get_cp
-
-   type(physics_state), intent(in)    :: phys_state
-   real(kind_phys), pointer           :: const_data_ptr(:,:,:)
-   type(physics_tend ), intent(inout) :: phys_tend
-   integer,  intent(in)               :: ncols, pver
-
-   real(kind_phys) :: inv_cp(ncols,pver)
-   !----------------------------------------------------------------------------
-
-!xxx   if (lcp_moist.and.phys_dyn_cp==1) then lcp_moist removed
-     !
-     ! scale temperature tendency so that thermal energy increment from physics
-     ! matches SE (not taking into account dme adjust)
-     !
-     ! note that if lcp_moist=.false. then there is thermal energy increment
-     ! consistency (not taking into account dme adjust)
-     !
-     call get_cp(const_data_ptr(1:ncols,1:pver,1:num_advected),.true.,inv_cp)
-
-     phys_tend%dTdt_total(1:ncols,1:pver) = phys_tend%dTdt_total(1:ncols,1:pver)*cpair*inv_cp
-!xxx   end if
-end subroutine thermodynamic_consistency
-
-!=========================================================================================
-
 end module dp_coupling
