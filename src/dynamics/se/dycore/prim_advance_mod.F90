@@ -329,6 +329,7 @@ contains
 
     character(len=*), parameter :: subname = 'applyCAMforcing (SE)'
 
+    call t_startf('applyCAMforc')
     if (use_cslam) then
       allocate(ftmp_fvm(nc,nc,nlev,ntrac,nets:nete), stat=iret)
       call check_allocate(iret, subname, 'ftmp_fvm(nc,nc,nlev,ntrac,nets:nete)', &
