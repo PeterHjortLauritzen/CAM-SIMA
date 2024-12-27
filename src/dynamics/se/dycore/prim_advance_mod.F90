@@ -329,6 +329,7 @@ contains
 
     character(len=*), parameter :: subname = 'applyCAMforcing (SE)'
 
+    call t_startf('applyCAMforc')
     if (use_cslam) then
       allocate(ftmp_fvm(nc,nc,nlev,ntrac,nets:nete), stat=iret)
       call check_allocate(iret, subname, 'ftmp_fvm(nc,nc,nlev,ntrac,nets:nete)', &
@@ -1581,6 +1582,7 @@ contains
              .false., cp, factor=1.0_r8/elem(ie)%state%dp3d(:,:,:,tl),&
              active_species_idx_dycore=thermodynamic_active_species_idx_dycore)
         ptop = hyai(1)*ps0
+
         do j=1,np
           !get mixing ratio of thermodynamic active species only
           !(other tracers not used in get_hydrostatic_energy)
