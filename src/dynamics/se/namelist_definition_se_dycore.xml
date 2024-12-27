@@ -252,10 +252,10 @@
       Second-order viscosity applied only near the model top [m^2/s].
     </desc>
     <values>
-      <value>5.0e5</value>
-      <value waccmx="1">1.0e6</value>
-      <!-- WACCM uses molecular/thermal diffusion in sponge   -->
-      <value waccm_phys="1">0.0</value>
+      <value>1.25e5</value>
+      <value waccmx="1"    >1.0e6</value>
+      <value waccm_phys="1">1.0e6</value>
+      <value model_top="mt">1.0e6</value>
       <value se_refined_mesh="1">2.0e5</value>
     </values>
   </entry>
@@ -679,7 +679,8 @@
       If se_ftype=1 then se_dribble_in_rsplit_loop has no effect since physics tendencies are added as an adjustment
     </desc>
     <values>
-      <value>1</value>
+      <value>0</value>
+      <value hgrid="ne16np4" waccm_phys="1" waccmx="0">1</value>
     </values>
   </entry>
 </entry_id_pg>
