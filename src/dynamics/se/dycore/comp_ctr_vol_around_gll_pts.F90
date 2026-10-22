@@ -1921,9 +1921,9 @@ call pio_write_darray(file, grid_corner_lon_id, iodesc, gwork, status)
 
       do j=1,np
         do i=1,np
-          cvlist(ie)%vert(:,i,j)%x = 0_r8
-          cvlist(ie)%vert(:,i,j)%y = 0_r8
-          cvlist(ie)%vert(:,i,j)%z = 0_r8
+          cvlist(ie)%vert(:,i,j)%x = 0._r8
+          cvlist(ie)%vert(:,i,j)%y = 0._r8
+          cvlist(ie)%vert(:,i,j)%z = 0._r8
         end do
       end do
 
@@ -2105,9 +2105,9 @@ call pio_write_darray(file, grid_corner_lon_id, iodesc, gwork, status)
 
       do j=2,np-1
         do i=2,np-1
-          vertpack(i,j,1) =0_r8
-          vertpack(i,j,2) =0_r8
-          vertpack(i,j,3) =0_r8
+          vertpack(i,j,1) =0._r8
+          vertpack(i,j,2) =0._r8
+          vertpack(i,j,3) =0._r8
         end do
       end do
 
@@ -2221,7 +2221,7 @@ call pio_write_darray(file, grid_corner_lon_id, iodesc, gwork, status)
            - (v12%x*v23%z - v12%z*v23%x)*v12%y &
            + (v12%x*v23%y - v12%y*v23%x)*v12%z
 
-      if (test > 0_r8)then
+      if (test > 0._r8)then
         orient=.TRUE.
       end if
 
@@ -2309,7 +2309,7 @@ call pio_write_darray(file, grid_corner_lon_id, iodesc, gwork, status)
     end do
     call wrap_repro_sum(nvars=6, comm=hybrid%par%comm)
 
-    ptot=0_r8
+    ptot=0._r8
     do face=1,6
       red_sum%buf(1) = global_shared_sum(face)
       psum = red_sum%buf(1)

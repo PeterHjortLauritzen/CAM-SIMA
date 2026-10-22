@@ -1302,9 +1302,9 @@ contains
             v(1,1,1)%z=edge%receive(2*nce+isw+1)
             exit
         else
-            v(1,1,1)%x=0_r8
-            v(1,1,1)%y=0_r8
-            v(1,1,1)%z=0_r8
+            v(1,1,1)%x=0._r8
+            v(1,1,1)%y=0._r8
+            v(1,1,1)%z=0._r8
         endif
     end do
 
@@ -1318,9 +1318,9 @@ contains
             v(2,np,1)%z=edge%receive(2*nce+ise+1)
             exit
         else
-            v(2,np,1)%x=0_r8
-            v(2,np,1)%y=0_r8
-            v(2,np,1)%z=0_r8
+            v(2,np,1)%x=0._r8
+            v(2,np,1)%y=0._r8
+            v(2,np,1)%z=0._r8
         endif
     end do
 
@@ -1334,9 +1334,9 @@ contains
             v(3,np,np)%z=edge%receive(2*nce+ine+1)
             exit
         else
-            v(3,np,np)%x=0_r8
-            v(3,np,np)%y=0_r8
-            v(3,np,np)%z=0_r8
+            v(3,np,np)%x=0._r8
+            v(3,np,np)%y=0._r8
+            v(3,np,np)%z=0._r8
         endif
     end do
 
@@ -1350,9 +1350,9 @@ contains
             v(4,1,np)%z=edge%receive(2*nce+inw+1)
             exit
         else
-            v(4,1,np)%x=0_r8
-            v(4,1,np)%y=0_r8
-            v(4,1,np)%z=0_r8
+            v(4,1,np)%x=0._r8
+            v(4,1,np)%y=0._r8
+            v(4,1,np)%z=0._r8
         endif
     end do
 
