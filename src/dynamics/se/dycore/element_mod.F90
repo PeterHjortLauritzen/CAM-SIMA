@@ -187,7 +187,7 @@ module element_mod
      real(kind=r8) :: fcor(np,np)       ! Coriolis term
 
      type(index_t)          :: idxP
-     type(index_t), pointer :: idxV => null()
+     type(index_t), pointer :: idxV
      integer :: FaceNum
 
      ! force element_t to be a multiple of 8 bytes.
@@ -211,14 +211,13 @@ contains
 !==============================================================================
 
   subroutine PrintElem(arr)
-    use cam_logfile, only: iulog
 
-    real(kind=r8), intent(in) :: arr(:,:)
+    real(kind=r8) :: arr(:,:)
     integer :: i,j
 
       do j=np,1,-1
-         write(iulog,*) (arr(i,j), i=1,np)
-      end do
+         write(6,*) (arr(i,j), i=1,np)
+      enddo
 
   end subroutine PrintElem
 ! ===================== ELEMENT_MOD METHODS ==========================
@@ -258,10 +257,10 @@ contains
     real(r8)             :: y
     integer              :: i,j
 
-    length%x   = 0.5D0*(end%x-start%x)
-    length%y   = 0.5D0*(end%y-start%y)
-    centroid%x = 0.5D0*(end%x+start%x)
-    centroid%y = 0.5D0*(end%y+start%y)
+    length%x   = 0.50D0*(end%x-start%x)
+    length%y   = 0.50D0*(end%y-start%y)
+    centroid%x = 0.50D0*(end%x+start%x)
+    centroid%y = 0.50D0*(end%y+start%y)
     do j=1,SIZE(points)
        y = centroid%y + length%y*points(j)
        do i=1,SIZE(points)
@@ -282,8 +281,8 @@ contains
     real(r8) :: q(size(points))
     integer  :: i,j
 
-    p(:) = (1D0-points(:))/2D0
-    q(:) = (1D0+points(:))/2D0
+    p(:) = (1.0D0-points(:))/2.0D0
+    q(:) = (1.0D0+points(:))/2.0D0
 
     do j=1,SIZE(points)
        do i=1,SIZE(points)
@@ -307,12 +306,12 @@ contains
 
     type(cartesian3D_t)  :: cart(SIZE(points),SIZE(points))
 
-    real(r8) :: p(size(points)), q(size(points))
-    real(r8) :: r
+    real(r8) :: p(size(points))
+    real(r8) :: q(size(points)), r
     integer  :: i,j
 
-    p(:) = (1D0-points(:))/2D0
-    q(:) = (1D0+points(:))/2D0
+    p(:) = (1.0D0-points(:))/2.0D0
+    q(:) = (1.0D0+points(:))/2.0D0
 
     do j=1,SIZE(points)
        do i=1,SIZE(points)
@@ -392,7 +391,7 @@ contains
        do i=1,max_neigh_edges
           elem(j)%desc%loc2buf(i)=i
           elem(j)%desc%globalID(i)=-1
-       end do
+       enddo
 
     end do
   end subroutine allocate_element_desc
@@ -403,6 +402,7 @@ contains
     ! Allocate the SE element arrays using the pre-calculated SE dimensions
 
     use dimensions_mod, only: nc, nlev, nlevp, qsize_d, ntrac, use_cslam
+      use control_mod,    only: gll_advect_q
 
     !Dummy arguments:
     type(element_t), intent(inout) :: elem(:)
@@ -442,8 +442,10 @@ contains
       ! With CSLAM the tracers are advected on the fvm grid and the GLL Qdp is
       ! only refreshed from it, so Qdp does not time-rotate and a single
       ! timelevel is allocated.
-      ! TimeLevel_Qdp pins n0/np1 to 1 when use_cslam = .true.:
-      if (use_cslam) then
+      ! TimeLevel_Qdp pins n0/np1 to 1 when use_cslam = .true. unless GLL
+      ! double advection (gll_advect_q) is on, which needs two Qdp time
+      ! levels (cam6_4_215 sync):
+      if (use_cslam .and. .not. gll_advect_q) then
         allocate(elem(i)%state%Qdp(np,np,nlev,qsize_d,1), stat=iret, errmsg=errmsg)
         call check_allocate(iret, subname, 'elem%state%Qdp(np,np,nlev,qsize_d,1)', &
                             file=__FILE__, line=__LINE__, errmsg=errmsg)
