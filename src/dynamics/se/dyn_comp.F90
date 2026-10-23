@@ -79,11 +79,11 @@ subroutine dyn_readnl(NLFileName)
 
    !SE dycore:
    use namelist_mod,    only: homme_set_defaults, homme_postprocess_namelist
-   use control_mod,     only: hypervis_subcycle, hypervis_subcycle_sponge
+   use control_mod,     only: hypervis_subcycle, hypervis_subcycle_sponge, gll_advect_q
    use control_mod,     only: hypervis_subcycle_q, statefreq, runtype
    use control_mod,     only: nu, nu_div, nu_p, nu_q, nu_top, qsplit, rsplit
    use control_mod,     only: vert_remap_uvTq_alg, vert_remap_tracer_alg
-   use control_mod,     only: tstep_type, rk_stage_user
+   use control_mod,     only: tstep_type
    use control_mod,     only: ftype, limiter_option, partmethod
    use control_mod,     only: topology, variable_nsplit
    use control_mod,     only: fine_ne, hypervis_power, hypervis_scaling
@@ -142,10 +142,9 @@ subroutine dyn_readnl(NLFileName)
    integer                      :: se_tracer_num_threads
    logical                      :: se_write_restart_unstruct
    logical                      :: se_large_Courant_incr
+   real(r8)                     :: se_cslam_q_filter_nu_fac
+   logical                      :: se_gll_advect_q
    integer                      :: se_fvm_supercycling
-   integer                      :: se_fvm_supercycling_jet
-   integer                      :: se_kmin_jet
-   integer                      :: se_kmax_jet
    real(r8)                     :: se_molecular_diff
    integer                      :: se_pgf_formulation
    real(r8)                     :: se_dribble_in_rsplit_loop
@@ -189,10 +188,9 @@ subroutine dyn_readnl(NLFileName)
       se_tracer_num_threads,       &
       se_write_restart_unstruct,   &
       se_large_Courant_incr,       &
+      se_cslam_q_filter_nu_fac,    &
+      se_gll_advect_q,             &
       se_fvm_supercycling,         &
-      se_fvm_supercycling_jet,     &
-      se_kmin_jet,                 &
-      se_kmax_jet,                 &
       se_molecular_diff,           &
       se_pgf_formulation,          &
       se_dribble_in_rsplit_loop
@@ -261,10 +259,11 @@ subroutine dyn_readnl(NLFileName)
    call MPI_bcast(se_tracer_num_threads, 1, MPI_integer, masterprocid, mpicom,ierr)
    call MPI_bcast(se_write_restart_unstruct, 1, mpi_logical, masterprocid, mpicom, ierr)
    call MPI_bcast(se_large_Courant_incr, 1, mpi_logical, masterprocid, mpicom, ierr)
+   call MPI_bcast(se_cslam_q_filter_nu_fac, 1, mpi_real8, masterprocid, mpicom, ierr)
+   call MPI_bcast(se_gll_advect_q, 1, mpi_logical, masterprocid, mpicom, ierr)
+   ! provisional; model_grid_init applies '.and. use_cslam' once known:
+   gll_advect_q = se_gll_advect_q
    call MPI_bcast(se_fvm_supercycling, 1, mpi_integer, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_fvm_supercycling_jet, 1, mpi_integer, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_kmin_jet, 1, mpi_integer, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_kmax_jet, 1, mpi_integer, masterprocid, mpicom, ierr)
    call MPI_bcast(se_molecular_diff, 1, mpi_real8, masterprocid, mpicom, ierr)
    call MPI_bcast(se_pgf_formulation, 1, mpi_integer, masterprocid, mpicom, ierr)
    call MPI_bcast(se_dribble_in_rsplit_loop, 1, mpi_integer, masterprocid, mpicom, ierr)
@@ -284,8 +283,6 @@ subroutine dyn_readnl(NLFileName)
    call initomp()
 
    if (se_fvm_supercycling < 0) se_fvm_supercycling = se_rsplit
-   if (se_fvm_supercycling_jet < 0) se_fvm_supercycling_jet = se_rsplit
-
    ! Go ahead and enforce ne = 0 for refined mesh runs
    if (se_refined_mesh) then
       se_ne = 0
@@ -297,9 +294,7 @@ subroutine dyn_readnl(NLFileName)
    partmethod                = SFCURVE
    npart                     = se_npes
    ! CAM requires forward-in-time, subcycled dynamics
-   ! RK2 3 stage tracers, sign-preserving conservative
-   rk_stage_user             = 3
-   topology                  = "cube"
+   topology                 = "cube"
    ! Finally, set the HOMME variables which have different names
    fine_ne                   = se_fine_ne
    ftype                     = se_ftype
@@ -337,16 +332,16 @@ subroutine dyn_readnl(NLFileName)
    vert_remap_tracer_alg    = set_vert_remap(se_vert_remap_T, se_vert_remap_tracer_alg)
    fv_nphys                 = se_fv_nphys
    large_Courant_incr       = se_large_Courant_incr
+   cslam_q_filter           = se_cslam_q_filter_nu_fac > 0._r8
+   cslam_q_filter_nu_fac    = se_cslam_q_filter_nu_fac
    fvm_supercycling         = se_fvm_supercycling
-   fvm_supercycling_jet     = se_fvm_supercycling_jet
-   kmin_jet                 = se_kmin_jet
-   kmax_jet                 = se_kmax_jet
-   variable_nsplit          = .false.
    molecular_diff           = se_molecular_diff
    pgf_formulation          = se_pgf_formulation
    dribble_in_rsplit_loop   = se_dribble_in_rsplit_loop
-   if (rsplit < 1) then
-      call endrun('dyn_readnl: rsplit must be > 0')
+   ! rsplit == -1 is the "automatic" sentinel, resolved later
+   ! (via auto_rsplit); only reject other non-positive values here.
+   if (rsplit < 1 .and. rsplit /= -1) then
+      call endrun('dyn_readnl: rsplit must be > 0 (or -1 for automatic subcycling)')
    end if
 
    ! if restart or branch run
@@ -385,9 +380,6 @@ subroutine dyn_readnl(NLFileName)
 
    write_restart_unstruct = se_write_restart_unstruct
 
-   if (se_kmin_jet<0            ) kmin_jet             = 1
-   if (se_kmax_jet<0            ) kmax_jet             = pver
-
    if (masterproc) then
       write(iulog, '(a,i0)')   'dyn_readnl: se_ftype                    = ',ftype
       write(iulog, '(a,i0)')   'dyn_readnl: se_statediag_numtrac        = ',se_statediag_numtrac_save
@@ -395,6 +387,9 @@ subroutine dyn_readnl(NLFileName)
       write(iulog, '(a,i0)')   'dyn_readnl: se_hypervis_subcycle_sponge = ',se_hypervis_subcycle_sponge
       write(iulog, '(a,i0)')   'dyn_readnl: se_hypervis_subcycle_q      = ',se_hypervis_subcycle_q
       write(iulog, '(a,l4)')   'dyn_readnl: se_large_Courant_incr       = ',se_large_Courant_incr
+      write(iulog, '(a,f8.3)') 'dyn_readnl: se_cslam_q_filter_nu_fac    = ',se_cslam_q_filter_nu_fac
+      write(iulog, '(a,l4)')   'dyn_readnl: cslam_q_filter (derived)    = ',cslam_q_filter
+      write(iulog, '(a,l4)')   'dyn_readnl: se_gll_advect_q             = ',se_gll_advect_q
       write(iulog, '(a,i0)')   'dyn_readnl: se_limiter_option           = ',se_limiter_option
       if (.not. se_refined_mesh) then
          write(iulog, '(a,i0)')'dyn_readnl: se_ne                       = ',se_ne
@@ -428,9 +423,14 @@ subroutine dyn_readnl(NLFileName)
       write(iulog, '(a,a)')    'dyn_readnl: se_vert_remap_uvTq_alg        = ',trim(se_vert_remap_uvTq_alg)
       write(iulog, '(a,a)')    'dyn_readnl: se_vert_remap_tracer_alg      = ',trim(se_vert_remap_tracer_alg)
       write(iulog, '(a,i0)')   'dyn_readnl: se_fvm_supercycling           = ',fvm_supercycling
-      write(iulog, '(a,i0)')   'dyn_readnl: se_fvm_supercycling_jet       = ',fvm_supercycling_jet
-      write(iulog, '(a,i0)')   'dyn_readnl: se_kmin_jet                   = ',kmin_jet
-      write(iulog, '(a,i0)')   'dyn_readnl: se_kmax_jet                   = ',kmax_jet
+
+      write(iulog, *)   'dyn_readnl: se_sponge_del4_nu_fac         = ',se_sponge_del4_nu_fac
+      if (se_sponge_del4_nu_fac < 0) write(iulog, '(a)')   ' (automatically set based on model top location)'
+      write(iulog, *)   'dyn_readnl: se_sponge_del4_nu_div_fac     = ',se_sponge_del4_nu_div_fac
+      if (se_sponge_del4_nu_div_fac < 0)  write(iulog, '(a)')   ' (automatically set based on model top location)'
+      write(iulog, *)   'dyn_readnl: se_sponge_del4_lev            = ',se_sponge_del4_lev
+      if (se_sponge_del4_lev < 0)  write(iulog, '(a)')   ' (automatically set based on model top location)'
+
       if (se_refined_mesh) then
          write(iulog, '(a)') 'dyn_readnl: Refined mesh simulation'
          write(iulog, '(a)') 'dyn_readnl: se_mesh_file = ',trim(se_mesh_file)
@@ -569,6 +569,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    use prim_driver_mod,    only: prim_init2
    use se_dyn_time_mod,    only: time_at
    use control_mod,        only: runtype, nu_top, molecular_diff
+   use global_norms_mod,   only: nu_top_default
    use control_mod,        only: vert_remap_uvTq_alg, vert_remap_tracer_alg
    use control_mod,        only: statediag_numtrac
    use std_atm_profile,    only: std_atm_height
@@ -734,6 +735,18 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
        cnst_diag_name_gll(m) = const_diag_name(advected_constituent_index(m))
      end if
    end do
+
+   ! map water vapor constituent index (wv_idx) to dycore Qdp index
+   do m=1,thermodynamic_active_species_num
+     if (thermodynamic_active_species_idx(m) == wv_idx) then
+       wv_idx_dycore = thermodynamic_active_species_idx_dycore(m)
+       exit
+     end if
+   end do
+   if (masterproc) then
+     write(iulog,*) sub//": wv_idx_dycore (water vapor index in dycore Qdp) = ",wv_idx_dycore
+   end if
+
 #ifdef energy_budget_code
    do m=1,thermodynamic_active_species_liq_num
      if (use_cslam) then
@@ -843,9 +856,18 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    !
    ! compute scaling of traditional sponge layer damping (following cd_core.F90 in CAM-FV)
    !
+   ptop = hvcoord%hyai(1)*hvcoord%ps0
+   !
+   ! resolve automatic (-1) top-of-model del2 sponge coefficient from the model
+   ! top location; must happen before nu_scale_top below reads nu_top
+   !
+   if (nu_top<0.0_r8) then
+      nu_top = nu_top_default(ptop)
+      if (masterproc) write(iulog,'(a,e9.2)') sub//': se_nu_top=-1 -> nu_top = ',nu_top
+   end if
+
    nu_scale_top(:) = 0.0_r8
    if (nu_top>0) then
-      ptop  = hvcoord%hyai(1)*hvcoord%ps0
       if (ptop>300.0_r8) then
          !
          ! for low tops the tanh formulae below makes the sponge excessively deep
@@ -863,7 +885,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
          !
          nu_scale_top(1) = 4.4_r8
          nu_scale_top(2) = 1.3_r8
-         nu_scale_top(3) = 3.9_r8
+         nu_scale_top(3) = 0.39_r8
          ksponge_end = 3
       else if (ptop>1e-1_r8) then
          !
@@ -1107,7 +1129,7 @@ subroutine dyn_run(dyn_state)
    use dimensions_mod,   only: nc, nlev, use_cslam, ntrac, qsize
    use se_dyn_time_mod,  only: tstep, nsplit, timelevel_qdp, tevolve
    use hybrid_mod,       only: hybrid_t, config_thread_region, get_loop_ranges
-   use control_mod,      only: qsplit, rsplit, ftype_conserve
+   use control_mod,      only: qsplit, rsplit, ftype_conserve, gll_advect_q
    use thread_mod,       only: horz_num_threads
    use bndry_mod,        only: bndry_exchange
 #ifdef scam
@@ -1213,7 +1235,7 @@ subroutine dyn_run(dyn_state)
    end do
 
    ! convert elem(ie)%derived%fq to mass tendency
-   if (.not.use_cslam) then
+   if (.not.use_cslam .or. gll_advect_q) then
      do ie = nets, nete
        do m = 1, qsize
          do k = 1, nlev

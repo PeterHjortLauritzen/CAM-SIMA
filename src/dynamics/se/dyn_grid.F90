@@ -134,7 +134,7 @@ subroutine model_grid_init()
    use dimensions_mod,      only: nelem, nelemd, nelemdmax, globaluniquecols
    use dimensions_mod,      only: irecons_tracer, dimensions_mod_init, qsize
    use dimensions_mod,      only: fv_nphys, npsq, use_cslam, nlev, nlevp
-   use control_mod,         only: gll_advect_q
+   use control_mod,         only: gll_advect_q, del4_cslam_qgll
    use comp_gll_ctr_vol,    only: gll_grid_write
 
    ! Local variables
@@ -173,6 +173,16 @@ subroutine model_grid_init()
    ! Initialize SE-dycore specific variables,
    ! note that this must be done before "nlev" can be used:
    call dimensions_mod_init()
+
+   ! Resolve GLL double advection now that use_cslam is known
+   ! (cam6_4_215 sync; se_gll_advect_q read in dyn_readnl):
+   gll_advect_q = gll_advect_q .and. use_cslam
+   if (gll_advect_q) then
+      del4_cslam_qgll = .false.
+      if (masterproc) then
+         write(iulog, '(a)') 'model_grid_init: se_gll_advect_q=.true. -> forcing del4_cslam_qgll = .false.'
+      end if
+   end if
 
    if (use_cslam) then
       ! Use CSLAM for tracer advection
