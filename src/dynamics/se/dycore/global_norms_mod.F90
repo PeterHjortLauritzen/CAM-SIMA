@@ -903,7 +903,7 @@ contains
   ! dyn_grid_init, on all tasks, BEFORE the dynamics timestep is initialized.
   !=============================================================================
   subroutine set_global_max_normDinv(max_normDinv_loc, comm)
-    use spmd_utils, only: mpi_real8, mpi_max
+    use mpi,        only: mpi_real8, mpi_max
 
     real(kind=r8), intent(in) :: max_normDinv_loc ! task-local max of elem(:)%normDinv
     integer,       intent(in) :: comm             ! communicator spanning all tasks
@@ -920,7 +920,7 @@ contains
   ! and all CFL diagnostics see the final timestep.
   !=============================================================================
   function auto_rsplit(dt_remap, ptop) result(rsplit_auto)
-    use physconst,      only: ra
+    use dynconst,       only: ra
     use cam_abortutils, only: endrun
 
     real(kind=r8), intent(in) :: dt_remap     ! vertical remap timestep (dtime/nsplit)

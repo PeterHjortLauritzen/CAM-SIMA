@@ -35,7 +35,7 @@ use element_mod,            only: element_t
 use fvm_control_volume_mod, only: fvm_struct
 use hybvcoord_mod,          only: hvcoord_t
 use edgetype_mod,           only: EdgeBuffer_t
-use se_dyn_time_mod,        only: TimeLevel_t
+use se_dyn_time_mod,        only: TimeLevel_t, ptimelevels
 
 implicit none
 private

@@ -85,15 +85,15 @@ subroutine dyn_readnl(NLFileName)
    use control_mod,     only: vert_remap_uvTq_alg, vert_remap_tracer_alg
    use control_mod,     only: tstep_type
    use control_mod,     only: ftype, limiter_option, partmethod
-   use control_mod,     only: topology, variable_nsplit
+   use control_mod,     only: topology
    use control_mod,     only: fine_ne, hypervis_power, hypervis_scaling
    use control_mod,     only: max_hypervis_courant, statediag_numtrac,refined_mesh
    use control_mod,     only: molecular_diff, pgf_formulation, dribble_in_rsplit_loop
    use control_mod,     only: sponge_del4_nu_div_fac, sponge_del4_nu_fac, sponge_del4_lev
+   use control_mod,     only: cslam_q_filter, cslam_q_filter_nu_fac
    use dimensions_mod,  only: ne, npart, fv_nphys, use_cslam
    use dimensions_mod,  only: large_Courant_incr
-   use dimensions_mod,  only: fvm_supercycling, fvm_supercycling_jet
-   use dimensions_mod,  only: kmin_jet, kmax_jet
+   use dimensions_mod,  only: fvm_supercycling
    use params_mod,      only: SFCURVE
    use parallel_mod,    only: par, initmpi
    use thread_mod,      only: initomp, max_num_threads
@@ -544,7 +544,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    use cam_constituents,    only: const_is_wet, const_is_advected
    use cam_initfiles,       only: initial_file_get_id, topo_file_get_id
    use cam_control_mod,     only: initial_run
-   use air_composition,     only: thermodynamic_active_species_num, thermodynamic_active_species_idx
+   use air_composition,     only: thermodynamic_active_species_num, thermodynamic_active_species_idx, wv_idx
    use air_composition,     only: thermodynamic_active_species_idx_dycore
    use dynconst,            only: cpair, pstd
    use dyn_thermo,          only: get_molecular_diff_coef_reference
@@ -565,7 +565,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    use dimensions_mod,     only: ksponge_end, kmvis_ref, kmcnd_ref,rho_ref,km_sponge_factor
    use dimensions_mod,     only: cnst_name_gll, cnst_longname_gll, use_cslam
    use dimensions_mod,     only: irecons_tracer_lev, irecons_tracer, kord_tr, kord_tr_cslam
-   use dimensions_mod,     only: qmin_cslam
+   use dimensions_mod,     only: qmin_cslam, wv_idx_dycore
    use prim_driver_mod,    only: prim_init2
    use se_dyn_time_mod,    only: time_at
    use control_mod,        only: runtype, nu_top, molecular_diff
@@ -744,7 +744,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
      end if
    end do
    if (masterproc) then
-     write(iulog,*) sub//": wv_idx_dycore (water vapor index in dycore Qdp) = ",wv_idx_dycore
+     write(iulog,*) subname//": wv_idx_dycore (water vapor index in dycore Qdp) = ",wv_idx_dycore
    end if
 
 #ifdef energy_budget_code
@@ -863,7 +863,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    !
    if (nu_top<0.0_r8) then
       nu_top = nu_top_default(ptop)
-      if (masterproc) write(iulog,'(a,e9.2)') sub//': se_nu_top=-1 -> nu_top = ',nu_top
+      if (masterproc) write(iulog,'(a,e9.2)') subname//': se_nu_top=-1 -> nu_top = ',nu_top
    end if
 
    nu_scale_top(:) = 0.0_r8
