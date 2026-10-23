@@ -538,7 +538,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    use cam_pio_utils,       only: clean_iodesc_list
    use cam_abortutils,      only: check_allocate
    use spmd_utils,          only: iam, masterproc
-   use cam_constituents,    only: num_advected, num_constituents
+   use cam_constituents,    only: num_advected, num_constituents, const_is_wet
    use cam_constituents,    only: const_name, const_longname, const_diag_name
    use cam_constituents,    only: const_get_index, const_qmin
    use cam_constituents,    only: const_is_wet, const_is_advected
@@ -565,7 +565,7 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    use dimensions_mod,     only: ksponge_end, kmvis_ref, kmcnd_ref,rho_ref,km_sponge_factor
    use dimensions_mod,     only: cnst_name_gll, cnst_longname_gll, use_cslam
    use dimensions_mod,     only: irecons_tracer_lev, irecons_tracer, kord_tr, kord_tr_cslam
-   use dimensions_mod,     only: qmin_cslam, wv_idx_dycore
+   use dimensions_mod,     only: qmin_cslam, wv_idx_dycore, qmin_adv, cnst_is_wet_adv
    use prim_driver_mod,    only: prim_init2
    use se_dyn_time_mod,    only: time_at
    use control_mod,        only: runtype, nu_top, molecular_diff
@@ -691,6 +691,18 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
        qmin_cslam(m) = const_qmin(advected_constituent_index(m))
      end do
    end if
+
+   ! Advected-space constituent metadata for the dycore (issue #446):
+   allocate(qmin_adv(num_advected), stat=iret, errmsg=errmsg)
+   call check_allocate(iret, subname, 'qmin_adv(num_advected)', &
+                       file=__FILE__, line=__LINE__, errmsg=errmsg)
+   allocate(cnst_is_wet_adv(num_advected), stat=iret, errmsg=errmsg)
+   call check_allocate(iret, subname, 'cnst_is_wet_adv(num_advected)', &
+                       file=__FILE__, line=__LINE__, errmsg=errmsg)
+   do m = 1, num_advected
+     qmin_adv(m)        = const_qmin(advected_constituent_index(m))
+     cnst_is_wet_adv(m) = const_is_wet(advected_constituent_index(m))
+   end do
 
    do m=1,qsize
      !

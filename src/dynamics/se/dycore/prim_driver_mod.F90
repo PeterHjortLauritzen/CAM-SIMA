@@ -702,9 +702,8 @@ contains
       use element_mod,      only: element_t
       use hybvcoord_mod ,   only: hvcoord_t
       use dimensions_mod,   only: nelemd, nlev, np
-!Un-comment once constitutents are enabled -JN:
-!      use constituents,     only: cnst_type, qmin, num_advected
       use cam_constituents, only: num_advected
+      use dimensions_mod,   only: qmin_adv, cnst_is_wet_adv
       use cam_logfile,      only: iulog
       use spmd_utils,       only: masterproc
 
@@ -738,19 +737,19 @@ contains
         ! and conserve mixing ratio (not mass) of 'dry' tracers
         !
         do m_cnst = 1, num_advected
-!Un-comment once constitutents are enabled -JN:
-!          if (cnst_type(m_cnst).ne.'dry') then
+          ! Scale 'wet' constituents to conserve their mass under the dry-mass
+          ! adjustment and floor at the constituent minimum; 'dry'-type
+          ! constituents keep their mixing ratio (CAM-SIMA issue #446).
+          if (cnst_is_wet_adv(m_cnst)) then
             do k=1,nlev
               do j = 1,np
                 do i = 1,np
                   q(i,j,k,ie,m_cnst) = q(i,j,k,ie,m_cnst)*factor(i,j,k)
-!Un-comment once constitutents are enabled -JN:
-!                  q(i,j,k,ie,m_cnst) = max(qmin(m_cnst),q(i,j,k,ie,m_cnst))
-                  q(i,j,k,ie,m_cnst) = max(0._r8,q(i,j,k,ie,m_cnst))
+                  q(i,j,k,ie,m_cnst) = max(qmin_adv(m_cnst),q(i,j,k,ie,m_cnst))
                 end do
               end do
             end do
-!          end if
+          end if
         end do
       end do
       if (masterproc) then

@@ -56,6 +56,11 @@ module dimensions_mod
   ! The mapping is done in dyn_comp from the host constituent index space.
   real(r8), allocatable, public :: qmin_cslam(:)
 
+  ! Advected-constituent metadata in dense advected index space (1:num_advected),
+  ! mapped from the host constituent object in dyn_comp (CAM-SIMA issue #446):
+  real(r8), allocatable, public :: qmin_adv(:)     ! minimum mixing ratio
+  logical,  allocatable, public :: cnst_is_wet_adv(:) ! wet (moist-mass) constituent
+
   real(r8), allocatable, public :: nu_scale_top(:) ! scaling of del2 viscosity in sponge layer (initialized in dyn_comp)
   real(r8), allocatable, public :: nu_lev(:)       ! level dependent del4 (u,v) damping
   real(r8), allocatable, public :: nu_t_lev(:)     ! level dependent del4 T damping
