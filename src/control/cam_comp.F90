@@ -739,7 +739,14 @@ contains
          end if
 
          ! Set new minimum value:
-         call const_set_qmin(const_idx, 1.E-12_kind_phys)
+         ! b4b_testing (b4b-cam-compat branch, VERIFICATION ONLY): water vapor
+         ! qmin set to 0 instead of 1.E-12. The qmin floor application differs
+         ! between the CAM and CAM-SIMA hosts at floored points (ordering
+         ! interaction); a zero floor is an identity on positive values, which
+         ! makes CAM vs CAM-SIMA comparisons bit-for-bit (proven in the
+         ! moist-adiabatic ne30pg3 experiment, 2026-10-28). Production runs
+         ! use 1.E-12.
+         call const_set_qmin(const_idx, 0._kind_phys)
       end if
       !-------------------------------------------
 

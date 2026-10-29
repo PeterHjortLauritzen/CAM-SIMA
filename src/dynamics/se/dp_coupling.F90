@@ -1,3 +1,6 @@
+! b4b_testing: this copy carries CAM-compatibility (bit-for-bit) test code.
+! Grep for "b4b_testing" to locate all modifications.
+#define b4b_testing 1
 module dp_coupling
 
 !-------------------------------------------------------------------------------
@@ -14,6 +17,9 @@ private
 public :: d_p_coupling, p_d_coupling
 
 real(r8), allocatable :: q_prev(:,:,:) ! Previous Q for computing tendencies
+#ifdef b4b_testing
+real(r8), allocatable :: q_prev_wet_b4b(:,:,:) ! b4b_testing: pre-physics WET q
+#endif
 
 real(kind_phys), allocatable :: qmin_vals(:) !Consitutent minimum values array
 
@@ -298,6 +304,17 @@ subroutine d_p_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_out)
    call t_startf('derived_phys')
    call derived_phys_dry(cam_runtime_opts, phys_state, phys_tend)
    call t_stopf('derived_phys')
+#ifdef b4b_testing
+   ! b4b_testing: save the pre-physics WET constituents; CAM's physics_update
+   ! round trip operates on wet values, so the mimic must too.
+   if (.not. allocated(q_prev_wet_b4b)) then
+      allocate(q_prev_wet_b4b(pcols,pver,num_advected), stat=ierr)
+   end if
+   do m = 1, num_advected
+      q_prev_wet_b4b(1:pcols,1:pver,m) = real(const_data_ptr(1:pcols,1:pver,advected_constituent_index(m)), r8)
+   end do
+#endif
+
 
 end subroutine d_p_coupling
 
@@ -307,6 +324,9 @@ subroutine p_d_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_in, tl_f, t
 
    ! Convert the physics output state into the dynamics input state.
    use shr_kind_mod,     only: shr_kind_cl
+#ifdef b4b_testing
+   use time_manager,     only: get_step_size
+#endif
    use cam_ccpp_cap,     only: cam_constituents_array
    use cam_constituents, only: num_advected
    use cam_constituents, only: const_is_wet
@@ -365,6 +385,9 @@ subroutine p_d_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_in, tl_f, t
    character(len=shr_kind_cl)  :: errmsg
 
    character(len=*), parameter :: subname='p_d_coupling'
+#ifdef b4b_testing
+   real(r8) :: ztodt_b4b
+#endif
    !----------------------------------------------------------------------------
 
    if (.not. local_dp_map) then
@@ -400,6 +423,10 @@ subroutine p_d_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_in, tl_f, t
    !Grab pointer to constituent array
    const_data_ptr => cam_constituents_array()
 
+#ifdef b4b_testing
+   ztodt_b4b = real(get_step_size(), r8)
+#endif
+
    !Convert wet mixing ratios to dry, which for CAM
    !configurations is only the water species:
    !$omp parallel do num_threads(max_num_threads) private (ilyr, icol, m, m_cnst, factor)
@@ -412,7 +439,16 @@ subroutine p_d_coupling(cam_runtime_opts, phys_state, phys_tend, dyn_in, tl_f, t
          do m=1, num_advected
             m_cnst = advected_constituent_index(m)
             if (const_is_wet(m_cnst)) then
+#ifdef b4b_testing
+               ! b4b_testing: apply CAM's ptend/physics_update round trip to the
+               ! WET value before the wet->dry conversion, exactly as CAM does.
+               const_data_ptr(icol,ilyr,m_cnst) = factor*                      &
+                    (q_prev_wet_b4b(icol,ilyr,m) +                             &
+                     ((real(const_data_ptr(icol,ilyr,m_cnst), r8) -            &
+                       q_prev_wet_b4b(icol,ilyr,m)) / ztodt_b4b) * ztodt_b4b)
+#else
                const_data_ptr(icol,ilyr,m_cnst) = factor*const_data_ptr(icol,ilyr,m_cnst)
+#endif
             end if
          end do
 
