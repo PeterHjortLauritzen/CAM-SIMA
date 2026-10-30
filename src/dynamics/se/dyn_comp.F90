@@ -916,9 +916,9 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
       call gws_init(elem)
    end if  ! iam < par%nprocs
 
-   call history_add_field ('nu_kmvis', 'Molecular viscosity Laplacian coefficient', 'lev', 'avg', '1',                gridname='GLL')
-   call history_add_field ('nu_kmcnd', 'Thermal conductivity Laplacian coefficient', 'lev', 'avg', '1',               gridname='GLL')
-   call history_add_field ('nu_kmcnd_dp', 'Thermal conductivity like Laplacian coefficient on dp', 'lev', 'avg', '1', gridname='GLL')
+   call history_add_field ('nu_kmvis', 'Molecular viscosity Laplacian coefficient', 'lev', 'avg', '1',                gridname='GLL_hist')
+   call history_add_field ('nu_kmcnd', 'Thermal conductivity Laplacian coefficient', 'lev', 'avg', '1',               gridname='GLL_hist')
+   call history_add_field ('nu_kmcnd_dp', 'Thermal conductivity like Laplacian coefficient on dp', 'lev', 'avg', '1', gridname='GLL_hist')
 
    ! Forcing from physics on the GLL grid
    call history_add_field ('FU', 'Zonal wind forcing term on GLL grid', 'lev', 'avg', 'm s-2',      gridname='GLL_hist')
@@ -930,21 +930,21 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    if (use_cslam) then
       do m = 1, ntrac
          call history_add_field (trim(const_diag_name(advected_constituent_index(m)))//'_fvm', trim(const_longname(m)), &
-                                 'lev', 'inst', 'kg/kg', gridname='FVM')
+                                 'lev', 'inst', 'kg/kg', gridname='FVM_hist')
 
          call history_add_field ('F'//trim(const_diag_name(advected_constituent_index(m)))//'_fvm', &
            trim(const_longname(m))//' mixing ratio forcing term (q_new-q_old) on fvm grid', &
-           'lev', 'inst', 'kg kg-1 s-1', gridname='FVM')
+           'lev', 'inst', 'kg kg-1 s-1', gridname='FVM_hist')
       end do
 
-      call history_add_field ('dp_fvm' , 'CSLAM Pressure level thickness', 'lev', 'inst', 'Pa',   gridname='FVM')
-      call history_add_field ('PSDRY_fvm', 'CSLAM dry surface pressure', horiz_only, 'inst','Pa', gridname='FVM')
+      call history_add_field ('dp_fvm' , 'CSLAM Pressure level thickness', 'lev', 'inst', 'Pa',   gridname='FVM_hist')
+      call history_add_field ('PSDRY_fvm', 'CSLAM dry surface pressure', horiz_only, 'inst','Pa', gridname='FVM_hist')
    end if
 
    do m_cnst = 1, qsize
      call history_add_field ('F'//trim(cnst_diag_name_gll(m_cnst))//'_gll',  &
           trim(cnst_longname_gll(m_cnst))//' mixing ratio forcing term (q_new-q_old) on GLL grid', &
-          'lev', 'inst', 'kg kg-1 s-1', gridname='GLL')
+          'lev', 'inst', 'kg kg-1 s-1', gridname='GLL_hist')
    end do
 
    ! Energy diagnostics and axial angular momentum diagnostics
@@ -988,13 +988,13 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    if (use_cslam) then
      do m = 1, num_advected
        call history_add_field(tottnam(m), trim(const_name(advected_constituent_index(m)))//&
-                              ' horz + vert', 'lev','avg','kg kg-1 s-1', gridname='FVM')
+                              ' horz + vert', 'lev','avg','kg kg-1 s-1', gridname='FVM_hist')
      end do
    else
      do m = 1, num_advected
        call history_add_field(tottnam(m), trim(const_name(advected_constituent_index(m)))//&
                               ' horz + vert', 'lev','avg','kg kg-1 s-1',  &
-            gridname='GLL')
+            gridname='GLL_hist')
      end do
    end if
 #endif
@@ -1064,12 +1064,12 @@ subroutine dyn_init(cam_runtime_opts, dyn_in, dyn_out)
    if (use_cslam) then
      do m = 1, num_advected
        call history_add_field(tottnam(m), trim(const_name(advected_constituent_index(m)))//' horz + vert', 'lev','avg', &
-           'kg kg-1 s-1', gridname='FVM')
+           'kg kg-1 s-1', gridname='FVM_hist')
      end do
    else
      do m = 1, num_advected
        call history_add_field(tottnam(m), trim(const_name(advected_constituent_index(m)))//' horz + vert', 'lev','avg', &
-            'kg kg-1 s-1', gridname='GLL')
+            'kg kg-1 s-1', gridname='GLL_hist')
      end do
    end if
    call phys_getopts(history_budget_out=history_budget, history_budget_histfile_num_out=budget_hfile_num)
@@ -1207,7 +1207,7 @@ subroutine dyn_run(dyn_state)
      if (is_history_field_active('F'//trim(cnst_diag_name_gll(m))//'_gll')) then
        do ie = nets, nete
          call history_out_field('F'//trim(cnst_diag_name_gll(m))//'_gll',&
-              RESHAPE(dyn_state%elem(ie)%derived%FQ(:,:,:,m), (/np*np,nlev/)))
+              RESHAPE(dyn_state%elem(ie)%derived%FQ(:,:,:,m), (/np*np,nlev/)), element_index=ie)
        end do
      end if
    end do
@@ -2781,17 +2781,17 @@ subroutine write_dyn_vars(dyn_out)
    if (use_cslam) then
       do ie = 1, nelemd
          call history_out_field('dp_fvm', RESHAPE(dyn_out%fvm(ie)%dp_fvm(1:nc,1:nc,:),   &
-                                       (/nc*nc,nlev/)))
+                                       (/nc*nc,nlev/)), element_index=ie)
          call history_out_field('PSDRY_fvm', RESHAPE(dyn_out%fvm(ie)%psc(1:nc,1:nc),     &
-                                          (/nc*nc/)))
+                                          (/nc*nc/)), element_index=ie)
          do m = 1, ntrac
             tfname = trim(const_diag_name(advected_constituent_index(m)))//'_fvm'
             call history_out_field(tfname, RESHAPE(dyn_out%fvm(ie)%c(1:nc,1:nc,:,m),     &
-                                        (/nc*nc,nlev/)))
+                                        (/nc*nc,nlev/)), element_index=ie)
 
             tfname = 'F'//trim(const_diag_name(advected_constituent_index(m)))//'_fvm'
             call history_out_field(tfname, RESHAPE(dyn_out%fvm(ie)%fc(1:nc,1:nc,:,m),    &
-                                        (/nc*nc,nlev/)))
+                                        (/nc*nc,nlev/)), element_index=ie)
          end do
       end do
    end if

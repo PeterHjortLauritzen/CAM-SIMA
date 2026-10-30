@@ -94,7 +94,7 @@ contains
               ftmp(i+(j-1)*nx,:) = adv_tendxyz(i,j,:,ic,ie)
             end do
           end do
-          call history_out_field(tottnam(ic), ftmp)
+          call history_out_field(tottnam(ic), ftmp, element_index=ie)
         end do
       end do
       deallocate(adv_tendxyz)

@@ -45,6 +45,7 @@ integer, parameter :: fvm_decomp = 102 ! The FVM (CSLAM) grid
 integer, parameter :: physgrid_d = 103 ! physics grid on dynamics decomp
 integer, parameter :: ini_decomp = 104 ! alternate dynamics grid for reading initial file
 integer, parameter :: dyn_hist_decomp = 105 ! The SE dynamics grid configured for history output.
+integer, parameter :: fvm_hist_decomp = 106 ! The FVM (CSLAM) grid configured for history output.
 integer, parameter :: ini_decomp_scm = 205 ! alternate dynamics grid for reading initial file
                                            ! in single colum (SCAM) mode.
 
@@ -1071,6 +1072,29 @@ subroutine define_cam_grids()
            'ncol_fvm', fvm_area, map=fvm_map)
       call cam_grid_attribute_register('FVM', 'nc', '', nc)
       call cam_grid_attribute_register('FVM', 'ne', '', ne)
+
+      ! Register a second "FVM hist" grid for history output (flattened
+      ! horizontal map, mirroring the GLL_hist grid): fields written through
+      ! history_out_field must be registered on this grid, since the native
+      ! FVM grid's (nc*nc, nelemd) buffer layout cannot be addressed by it.
+      nullify(grid_map)
+      allocate(grid_map(3, ncols_fvm), stat=ierr, errmsg=errmsg)
+      call check_allocate(ierr, subname, 'grid_map(3, ncols_fvm) (FVM_hist)', &
+                          file=__FILE__, line=__LINE__, errmsg=errmsg)
+
+      grid_map = 0_iMap
+      do mapind = 1, ncols_fvm
+         grid_map(1, mapind) = mapind
+         grid_map(2, mapind) = 0
+         grid_map(3, mapind) = fvm_map(mapind)
+      end do
+
+      call cam_grid_register('FVM_hist', fvm_hist_decomp, lat_coord, lon_coord, &
+           grid_map, src_in=[1,0], block_indexed=.false., unstruct=.true.)
+      call cam_grid_attribute_register('FVM_hist', 'area_fvm', 'fvm grid areas', &
+           'ncol_fvm', fvm_area, map=fvm_map)
+      call cam_grid_attribute_register('FVM_hist', 'nc', '', nc)
+      call cam_grid_attribute_register('FVM_hist', 'ne', '', ne)
 
       deallocate(fvm_coord)
       deallocate(fvm_map)
